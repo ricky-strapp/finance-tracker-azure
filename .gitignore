@@ -1,0 +1,14 @@
+# Real and test database files — never commit real financial data
+*.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Environment variables and secrets
+.env
+
+# Editor clutter
+.vscode/
