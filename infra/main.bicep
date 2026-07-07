@@ -1,17 +1,20 @@
-targetScope = 'resourceGroup'
+targetScope = 'subscription'
 
-module personalPolicy './modules/policy.bicep' = {
-  name: 'personal-policy'
-  scope: resourceGroup('rg-fintrack-personal-uksouth')
-  params: {
-    environmentTagValue: 'Personal'
-  }
-}
+param rgDetails array
 
-module sharedPolicy './modules/policy.bicep' = {
-  name: 'shared-policy'
-  scope: resourceGroup('rg-fintrack-shared-uksouth')
+module resourceGroups './modules/resourceGroups.bicep' = [for item in rgDetails: {
+  name:'${item.rgName}-deployment'
   params: {
-    environmentTagValue: 'Shared'
-  }
-}
+    rgName: item.rgName
+    rgEnvironment: item.rgEnvironment
+    rgProject: item.rgProject
+    }
+}]
+
+module policy './modules/policy.bicep' = [for item in rgDetails: {
+  name: '${item.rgEnvironment}-policy'
+  scope: resourceGroup(item.rgName)
+  dependsOn: [
+    resourceGroups
+  ]
+}]
