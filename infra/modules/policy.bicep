@@ -1,5 +1,7 @@
 targetScope = 'resourceGroup'
 
+param environmentTagValue string
+
 var addTagsOnRGGUID = '/providers/Microsoft.Authorization/policyDefinitions/d157c373-a6c4-483d-aaad-570756956268'
 var inheritTagfromRGGUID = '/providers/Microsoft.Authorization/policyDefinitions/cd3aa116-8754-49c9-a813-ad46512ece54'
 
@@ -12,7 +14,7 @@ resource addEnvironmentTagsOnRG 'Microsoft.Authorization/policyAssignments@2020-
     policyDefinitionId: addTagsOnRGGUID
     parameters:{
         tagName: {value: 'Environment'}
-        tagValue: {value: 'Shared'}
+        tagValue: {value: environmentTagValue}
         }
   }
   identity: {
