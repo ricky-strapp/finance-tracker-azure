@@ -32,3 +32,5 @@ param requiredVnets = [
     rgName: 'rg-fintrack-demo-uksouth'
   }
 ]
+
+param containerRegistryName = 'fintrackcontainerregistry01'

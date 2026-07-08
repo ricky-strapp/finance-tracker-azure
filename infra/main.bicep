@@ -2,6 +2,7 @@ targetScope = 'subscription'
 
 param rgDetails array
 param requiredVnets array
+param containerRegistryName string
 
 module resourceGroups './modules/resourceGroups.bicep' = [for item in rgDetails: {
   name:'${item.rgName}-deployment'
@@ -32,3 +33,14 @@ module networking './modules/networking.bicep' = [for item in requiredVnets: {
     resourceGroups
   ]
 }]
+
+module containerRegistry './modules/containerRegistry.bicep' = {
+  name: 'fintrack-container-registry-deployment'
+  scope: resourceGroup('rg-fintrack-shared-uksouth')
+  params: {
+    resourceName: containerRegistryName
+  }
+  dependsOn: [
+    resourceGroups
+  ]
+}
