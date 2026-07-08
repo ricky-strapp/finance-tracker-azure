@@ -22,3 +22,7 @@ resource workspace 'Microsoft.OperationalInsights/workspaces@2025-07-01' = {
     }
   }
 }
+
+output workspaceResourceId string = workspace.id
+output workspaceCustomerId string = workspace.properties.customerId
+output workspaceName string = workspace.name

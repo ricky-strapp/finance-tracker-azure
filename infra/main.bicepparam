@@ -48,3 +48,14 @@ param requiredLogAnalyticsWorkspaces = [
     workspaceSku: 'PerGB2018'
   }
 ]
+
+param requiredManagedEnvironments = [
+  {
+    managedEnvironmentName: 'me-fintrack-personal-uksouth'
+    rgName: 'rg-fintrack-personal-uksouth'
+  }
+  {
+    managedEnvironmentName: 'me-fintrack-demo-uksouth'
+    rgName: 'rg-fintrack-demo-uksouth'
+  }
+]

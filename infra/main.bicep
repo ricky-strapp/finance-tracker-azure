@@ -5,6 +5,7 @@ param requiredVnets array
 param containerRegistryName string
 param containerRegistryRG string
 param requiredLogAnalyticsWorkspaces array
+param requiredManagedEnvironments array
 
 module resourceGroups './modules/resourceGroups.bicep' = [for item in rgDetails: {
   name:'${item.rgName}-deployment'
@@ -56,5 +57,21 @@ module logAnalytics './modules/logAnalytics.bicep' = [for item in requiredLogAna
   }
   dependsOn: [
     resourceGroups
+  ]
+}]
+
+var workspaceRGNames = map(requiredLogAnalyticsWorkspaces, ws => ws.rgName)
+
+module managedEnvironments './modules/managedEnvironments.bicep' = [for item in requiredManagedEnvironments: {
+  name: '${item.managedEnvironmentName}-deployment'
+  scope: resourceGroup(item.rgName)
+  params: {
+    workspaceName: logAnalytics[indexOf(workspaceRGNames, item.rgName)].outputs.workspaceName
+    managedEnvironmentName: item.managedEnvironmentName
+    workspaceCustomerId: logAnalytics[indexOf(workspaceRGNames, item.rgName)].outputs.workspaceCustomerId
+    workspaceRgName: item.rgName
+  }
+  dependsOn: [
+    logAnalytics
   ]
 }]
