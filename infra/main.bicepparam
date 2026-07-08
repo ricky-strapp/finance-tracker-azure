@@ -17,3 +17,18 @@ param rgDetails = [
     rgProject: 'Finance-Tracker'
   }
 ]
+
+param requiredVnets = [
+  {
+    vnetName: 'vnet-fintrack-personal-uksouth'
+    vnetAddressSpace: '10.0.0.0/16'
+    subnetAddressSpace: '10.0.0.0/24'
+    rgName: 'rg-fintrack-personal-uksouth'
+  }
+  {
+    vnetName: 'vnet-fintrack-demo-uksouth'
+    vnetAddressSpace: '10.1.0.0/16'
+    subnetAddressSpace: '10.1.0.0/24'
+    rgName: 'rg-fintrack-demo-uksouth'
+  }
+]
