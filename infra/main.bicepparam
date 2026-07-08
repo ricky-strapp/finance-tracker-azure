@@ -34,3 +34,17 @@ param requiredVnets = [
 ]
 
 param containerRegistryName = 'fintrackcontainerregistry01'
+param containerRegistryRG = 'rg-fintrack-shared-uksouth'
+
+param requiredLogAnalyticsWorkspaces = [
+  {
+    workspaceName: 'law-fintrack-personal-uksouth'
+    rgName: 'rg-fintrack-personal-uksouth'
+    workspaceSku: 'PerGB2018'
+  }
+  {
+    workspaceName: 'law-fintrack-demo-uksouth'
+    rgName: 'rg-fintrack-demo-uksouth'
+    workspaceSku: 'PerGB2018'
+  }
+]
