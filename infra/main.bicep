@@ -1,5 +1,6 @@
 targetScope = 'subscription'
 
+param location string
 param rgDetails array
 param requiredVnets array
 param containerRegistryName string
@@ -10,6 +11,7 @@ param requiredManagedEnvironments array
 module resourceGroups './modules/resourceGroups.bicep' = [for item in rgDetails: {
   name:'${item.rgName}-deployment'
   params: {
+    location: location
     rgName: item.rgName
     rgEnvironment: item.rgEnvironment
     rgProject: item.rgProject
@@ -61,6 +63,7 @@ module logAnalytics './modules/logAnalytics.bicep' = [for item in requiredLogAna
 }]
 
 var workspaceRGNames = map(requiredLogAnalyticsWorkspaces, ws => ws.rgName)
+var networkRGNames = map(requiredVnets, vnet => vnet.rgName)
 
 module managedEnvironments './modules/managedEnvironments.bicep' = [for item in requiredManagedEnvironments: {
   name: '${item.managedEnvironmentName}-deployment'
@@ -70,8 +73,10 @@ module managedEnvironments './modules/managedEnvironments.bicep' = [for item in 
     managedEnvironmentName: item.managedEnvironmentName
     workspaceCustomerId: logAnalytics[indexOf(workspaceRGNames, item.rgName)].outputs.workspaceCustomerId
     workspaceRgName: item.rgName
+    subnetResourceId: networking[indexOf(networkRGNames, item.rgName)].outputs.subnet1ResourceId
   }
   dependsOn: [
     logAnalytics
+    networking
   ]
 }]

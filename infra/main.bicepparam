@@ -1,61 +1,63 @@
 using 'main.bicep'
 
+param location = 'ukwest'
+
 param rgDetails = [
   {
-    rgName: 'rg-fintrack-personal-uksouth'
+    rgName: 'rg-fintrack-personal-${location}'
     rgEnvironment: 'Personal'
     rgProject: 'Finance-Tracker'
   }
   {
-    rgName: 'rg-fintrack-shared-uksouth'
-    rgEnvironment: 'Shared'
+    rgName: 'rg-fintrack-demo-${location}'
+    rgEnvironment: 'Demo'
     rgProject: 'Finance-Tracker'
   }
   {
-    rgName: 'rg-fintrack-demo-uksouth'
-    rgEnvironment: 'Demo'
+    rgName: 'rg-fintrack-shared-${location}'
+    rgEnvironment: 'Shared'
     rgProject: 'Finance-Tracker'
   }
 ]
 
 param requiredVnets = [
   {
-    vnetName: 'vnet-fintrack-personal-uksouth'
+    vnetName: 'vnet-fintrack-personal-${location}'
     vnetAddressSpace: '10.0.0.0/16'
     subnetAddressSpace: '10.0.0.0/24'
-    rgName: 'rg-fintrack-personal-uksouth'
+    rgName: 'rg-fintrack-personal-${location}'
   }
   {
-    vnetName: 'vnet-fintrack-demo-uksouth'
+    vnetName: 'vnet-fintrack-demo-${location}'
     vnetAddressSpace: '10.1.0.0/16'
     subnetAddressSpace: '10.1.0.0/24'
-    rgName: 'rg-fintrack-demo-uksouth'
+    rgName: 'rg-fintrack-demo-${location}'
   }
 ]
 
 param containerRegistryName = 'fintrackcontainerregistry01'
-param containerRegistryRG = 'rg-fintrack-shared-uksouth'
+param containerRegistryRG = 'rg-fintrack-shared-${location}'
 
 param requiredLogAnalyticsWorkspaces = [
   {
-    workspaceName: 'law-fintrack-personal-uksouth'
-    rgName: 'rg-fintrack-personal-uksouth'
+    workspaceName: 'law-fintrack-personal-${location}'
+    rgName: 'rg-fintrack-personal-${location}'
     workspaceSku: 'PerGB2018'
   }
   {
-    workspaceName: 'law-fintrack-demo-uksouth'
-    rgName: 'rg-fintrack-demo-uksouth'
+    workspaceName: 'law-fintrack-demo-${location}'
+    rgName: 'rg-fintrack-demo-${location}'
     workspaceSku: 'PerGB2018'
   }
 ]
 
 param requiredManagedEnvironments = [
   {
-    managedEnvironmentName: 'me-fintrack-personal-uksouth'
-    rgName: 'rg-fintrack-personal-uksouth'
+    managedEnvironmentName: 'me-fintrack-personal-${location}'
+    rgName: 'rg-fintrack-personal-${location}'
   }
   {
-    managedEnvironmentName: 'me-fintrack-demo-uksouth'
-    rgName: 'rg-fintrack-demo-uksouth'
+    managedEnvironmentName: 'me-fintrack-demo-${location}'
+    rgName: 'rg-fintrack-demo-${location}'
   }
 ]
