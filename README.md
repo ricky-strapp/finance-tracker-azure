@@ -4,7 +4,7 @@
 
 I have been an RPA Developer for the last 10 years, working in the Insurance, Energy and Charity sectors. It is my intention to pivot career paths and transition into an Azure based role.
 
-With this in mind, I have been actively learning Azure and I formally achieved my AZ-104 certification in June 2026. I detailed my learning journey in a repo that can be viewed here (Link). This is an additional project to allow me to practice and demonstrate my Azure proficiency in a more complete way.
+With this in mind, I have been actively learning Azure and I formally achieved my AZ-104 certification in June 2026. I detailed my learning journey in a repo that can be viewed [here](https://github.com/ricky-strapp/AZ-104-Study). This is an additional project to allow me to practice and demonstrate my Azure proficiency in a more complete way.
 
 **Initial concept**
 
