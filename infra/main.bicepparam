@@ -61,3 +61,16 @@ param requiredManagedEnvironments = [
     rgName: 'rg-fintrack-demo-${location}'
   }
 ]
+
+param requiredAppServices = [
+  {
+    appServiceName: 'as-fintrack-personal-${location}'
+    rgName: 'rg-fintrack-personal-${location}'
+    managedEnvironmentName: 'me-fintrack-personal-${location}'
+  }
+  {
+    appServiceName: 'as-fintrack-demo-${location}'
+    rgName: 'rg-fintrack-demo-${location}'
+    managedEnvironmentName: 'me-fintrack-demo-${location}'
+  }
+]

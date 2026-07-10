@@ -29,3 +29,6 @@ resource managedEnvironment 'Microsoft.App/managedEnvironments@2025-07-01' = {
     }
   }
 }
+
+output managedEnvironmentId string = managedEnvironment.id
+output managedEnvironmentName string = managedEnvironment.name

@@ -7,6 +7,7 @@ param containerRegistryName string
 param containerRegistryRG string
 param requiredLogAnalyticsWorkspaces array
 param requiredManagedEnvironments array
+param requiredAppServices array
 
 module resourceGroups './modules/resourceGroups.bicep' = [for item in rgDetails: {
   name:'${item.rgName}-deployment'
@@ -78,5 +79,18 @@ module managedEnvironments './modules/managedEnvironments.bicep' = [for item in 
   dependsOn: [
     logAnalytics
     networking
+  ]
+}]
+
+module containerApps './modules/containerApp.bicep' = [for item in requiredAppServices: {
+  name: '${item.appServiceName}-deployment'
+  scope: resourceGroup(item.rgName)
+  params: {
+    resourceName: item.appServiceName
+    location: location
+    managedEnvironmentId: '/subscriptions/${subscription().subscriptionId}/resourceGroups/${item.rgName}/providers/Microsoft.App/managedEnvironments/${item.managedEnvironmentName}'
+  }
+  dependsOn: [
+    managedEnvironments
   ]
 }]
