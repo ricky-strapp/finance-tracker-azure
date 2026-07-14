@@ -1,5 +1,11 @@
 Build Notes
 
+## 11/07/2026
+- Installed WSL2 and Docker Desktop. I have never used these before, so there was a small amount of installation tasks and familiarisation around that.
+- I made a few very minor modifications to my applications base code before I started with creating the image to make it container friendly. This included adjusting how the SQLite database is initialised and updating the requirements.txt file to include Gunicorn. This means I can upload the code here tomorrow after a final check for anything sensitive.
+- Created an image of my app using `docker build` and tested locally using `docker run`. I only ran into a couple of minor issues relating to the syntax in my dockerfile, once resolved the app was running successfully with no data.
+- After that, I stopped the container running, and restarted it but with my database file volume mounted instead. This ran perfectly, so the next step will be to upload the container image into Azure Container Registry and then have Container Apps run it from there. 
+
 ## 10/07/2026
 - Added container app module. It just creates the Microsoft test app on both environments for now. The only real difficulty I had here was around getting the managed environment ID, because I specifically wanted to avoid tying the creation of container apps into the managed environments loop, which seemed like the easy, but wrong, way to do it. Once I got all that straightened out, I went to deploy, but it failed. I originally had this line in my code:
   
