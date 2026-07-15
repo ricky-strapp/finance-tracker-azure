@@ -1,6 +1,13 @@
 Build Notes
 
-## 11/07/2026
+## 15/07/2026
+- Uploaded the application code to repo
+- Uploaded application image to Azure Container Registry using `docker tag` and `docker push` commands
+- Created identity module. The only difficulty here was getting the role definition ID, for which I eventually learned that I had to use `az role definition list --name "AcrPull" --query "[].name" --output tsv` and then wrap the ID itself in the subscription level function. Sources: 1 [Microsoft.ManagedIdentity userAssignedIdentities 2024-11-30](https://learn.microsoft.com/en-us/azure/templates/microsoft.managedidentity/2024-11-30/userassignedidentities?pivots=deployment-language-bicep) 2 [Microsoft.Authorization roleAssignments](https://learn.microsoft.com/en-us/azure/templates/microsoft.authorization/roleassignments?pivots=deployment-language-bicep)
+- Updated containerApp module. The most difficult thing here was the `userAssignedIdentities` field which ultimately needed the following entry `{'${identityID}':{}}`. This was hard to work out because it was not particularly clear to me why just having `identityID` or even `{${identityID}}` wouldn't work. I eventually found source 1, which showed the required input formatting, albeit with no actual explanation for it. Source: 1 [Add a user-assigned identity](https://learn.microsoft.com/en-us/azure/container-apps/managed-identity?tabs=bicep%2Cdotnet). 
+- I had a few false starts where I had the paths to the container registry and image itself slightly wrong, then after that the only other issue was that I was still pointed to port 80 from the 'Hello World' placeholder image, whereas my app listens on port 5000. So once that was fixed, both the apps were working fine, using my app image (with no data just yet).
+
+## 14/07/2026
 - Installed WSL2 and Docker Desktop. I have never used these before, so there was a small amount of installation tasks and familiarisation around that.
 - I made a few very minor modifications to my applications base code before I started with creating the image to make it container friendly. This included adjusting how the SQLite database is initialised and updating the requirements.txt file to include Gunicorn. This means I can upload the code here tomorrow after a final check for anything sensitive.
 - Created an image of my app using `docker build` and tested locally using `docker run`. I only ran into a couple of minor issues relating to the syntax in my dockerfile, once resolved the app was running successfully with no data.
