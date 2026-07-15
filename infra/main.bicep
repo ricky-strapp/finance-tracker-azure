@@ -82,6 +82,19 @@ module managedEnvironments './modules/managedEnvironments.bicep' = [for item in 
   ]
 }]
 
+module identity './modules/identity.bicep' = {
+  name: 'identity-deployment'
+  scope: resourceGroup(containerRegistryRG)
+  params: {
+    location: location
+    containerRegistryName: containerRegistryName
+    identityName: 'fintrack-identity'
+  }
+  dependsOn: [
+    containerRegistry
+  ]
+}
+
 module containerApps './modules/containerApp.bicep' = [for item in requiredAppServices: {
   name: '${item.appServiceName}-deployment'
   scope: resourceGroup(item.rgName)
@@ -89,8 +102,13 @@ module containerApps './modules/containerApp.bicep' = [for item in requiredAppSe
     resourceName: item.appServiceName
     location: location
     managedEnvironmentId: '/subscriptions/${subscription().subscriptionId}/resourceGroups/${item.rgName}/providers/Microsoft.App/managedEnvironments/${item.managedEnvironmentName}'
+    identityID: identity.outputs.identityId
+    containerRegistryName: '${containerRegistryName}.azurecr.io'
+    containerImage: '${containerRegistryName}.azurecr.io/fintrack:v1'
   }
   dependsOn: [
     managedEnvironments
   ]
 }]
+
+
