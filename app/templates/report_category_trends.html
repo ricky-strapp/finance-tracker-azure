@@ -1,0 +1,465 @@
+{% extends "layout.html" %}
+{% block title %}Finance Tracker{% endblock %}
+
+{% block content %}
+<div class="p-8">
+
+    <h1 class="text-2xl font-semibold mb-6">Category Trends</h1>
+
+    <!-- Overview chart -->
+    <div class="bg-gray-900 rounded-xl p-6 mb-8">
+
+        <!-- Controls row -->
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+
+            <!-- Left: period + granularity + spend/income mode -->
+            <div class="flex items-center gap-3 flex-wrap">
+
+                <!-- Period -->
+                <div class="flex rounded-lg overflow-hidden border border-gray-700">
+                    <button onclick="setPeriod('all')" id="period-all"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-blue-600 text-white">All Time</button>
+                    <button onclick="setPeriod('12m')" id="period-12m"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">12 Months</button>
+                    <button onclick="setPeriod('6m')" id="period-6m"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">6 Months</button>
+                    <button onclick="setPeriod('3m')" id="period-3m"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">3 Months</button>
+                    <button onclick="setPeriod('1m')" id="period-1m"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">This Month</button>
+                </div>
+
+                <!-- Granularity -->
+                <div class="flex rounded-lg overflow-hidden border border-gray-700">
+                    <button onclick="setGranularity('month')" id="gran-month"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-blue-600 text-white">Monthly</button>
+                    <button onclick="setGranularity('week')" id="gran-week"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">Weekly</button>
+                    <button onclick="setGranularity('day')" id="gran-day"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">Daily</button>
+                </div>
+
+                <!-- Spend / Income -->
+                <div class="flex rounded-lg overflow-hidden border border-gray-700">
+                    <button onclick="setMode('spend')" id="mode-spend"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-blue-600 text-white">Spending</button>
+                    <button onclick="setMode('income')" id="mode-income"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">Income</button>
+                </div>
+
+            </div>
+
+            <!-- Right: Line / Bar -->
+            <div class="flex rounded-lg overflow-hidden border border-gray-700">
+                <button id="ct-btn-line" onclick="setChartType('line')"
+                    class="px-4 py-1.5 text-sm font-medium transition-colors bg-blue-600 text-white">Line</button>
+                <button id="ct-btn-bar" onclick="setChartType('bar')"
+                    class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">Bar</button>
+            </div>
+
+        </div>
+
+        <!-- Chart -->
+        <div class="mb-4">
+            <canvas id="overviewChart" height="120"></canvas>
+        </div>
+
+        <!-- Category toggles -->
+        <div id="category-toggles" class="flex flex-wrap gap-2 mt-4"></div>
+
+        <p id="overview-empty" class="text-gray-500 text-sm hidden">No categorised data yet.</p>
+
+    </div>
+
+    <!-- Focus chart — single category -->
+    <div class="bg-gray-900 rounded-xl p-6" id="focus-section">
+
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <h2 class="text-lg font-medium">Focus: <span id="focus-title" class="text-blue-400">—</span></h2>
+                <p class="text-xs text-gray-500 mt-0.5">Select a category above or use the dropdown</p>
+            </div>
+            <select id="focus-select" onchange="setFocusCategory(this.value)"
+                class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                <option value="">— Select category —</option>
+            </select>
+        </div>
+
+        <div id="focus-chart-wrap">
+            <canvas id="focusChart" height="80"></canvas>
+        </div>
+
+        <!-- Focus summary -->
+        <div id="focus-summary" class="mt-4 grid grid-cols-3 gap-4 hidden">
+            <div class="bg-gray-800 rounded-lg p-3 text-center">
+                <p class="text-xs text-gray-400 mb-1">Average / period</p>
+                <p id="focus-avg" class="font-mono font-medium">—</p>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-3 text-center">
+                <p class="text-xs text-gray-400 mb-1">Highest period</p>
+                <p id="focus-max" class="font-mono font-medium">—</p>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-3 text-center">
+                <p class="text-xs text-gray-400 mb-1">Total</p>
+                <p id="focus-total" class="font-mono font-medium">—</p>
+            </div>
+        </div>
+
+        <p id="focus-empty" class="text-gray-500 text-sm hidden">No data for this category in the selected period.</p>
+
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+    let overviewChart      = null;
+    let focusChart         = null;
+    let currentPeriod      = "all";
+    let currentGranularity = "month";
+    let currentMode        = "spend";
+    let currentChartType   = "line";
+    let trendData          = null;
+    let categoryVisibility = {};
+    let focusCategoryId    = null;
+
+    const COLOURS = [
+        "#60a5fa","#34d399","#f59e0b","#f87171",
+        "#c084fc","#fb923c","#4ade80","#38bdf8",
+        "#a78bfa","#f472b6","#94a3b8","#fbbf24"
+    ];
+
+    // Same allowed-granularity rules as Net Worth / Income vs Spend
+    const ALLOWED_GRAN = {
+        "all": ["month", "week"],
+        "12m": ["month", "week"],
+        "6m":  ["month", "week", "day"],
+        "3m":  ["month", "week", "day"],
+        "1m":  ["week",  "day"],
+    };
+
+    // -----------------------------------------------------------------------
+    // Control handlers
+    // -----------------------------------------------------------------------
+
+    function setPeriod(p) {
+        currentPeriod = p;
+        ["all","12m","6m","3m","1m"].forEach(id => {
+            document.getElementById(`period-${id}`).className =
+                `px-4 py-1.5 text-sm font-medium transition-colors ${p === id ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400"}`;
+        });
+        const allowed = ALLOWED_GRAN[p];
+        if (!allowed.includes(currentGranularity)) {
+            currentGranularity = allowed[allowed.length - 1];
+        }
+        updateGranularityButtons();
+        load();
+    }
+
+    function setGranularity(g) {
+        if (!ALLOWED_GRAN[currentPeriod].includes(g)) return;
+        currentGranularity = g;
+        updateGranularityButtons();
+        load();
+    }
+
+    function updateGranularityButtons() {
+        const allowed = ALLOWED_GRAN[currentPeriod];
+        ["month","week","day"].forEach(g => {
+            const btn        = document.getElementById(`gran-${g}`);
+            const isActive   = g === currentGranularity;
+            const isDisabled = !allowed.includes(g);
+            if (isDisabled) {
+                btn.className = "px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-600 cursor-not-allowed";
+            } else if (isActive) {
+                btn.className = "px-4 py-1.5 text-sm font-medium transition-colors bg-blue-600 text-white";
+            } else {
+                btn.className = "px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400";
+            }
+        });
+    }
+
+    function setMode(m) {
+        currentMode = m;
+        categoryVisibility = {};
+        focusCategoryId    = null;
+        document.getElementById("mode-spend").className =
+            `px-4 py-1.5 text-sm font-medium transition-colors ${m === "spend" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400"}`;
+        document.getElementById("mode-income").className =
+            `px-4 py-1.5 text-sm font-medium transition-colors ${m === "income" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400"}`;
+        load();
+    }
+
+    function setChartType(type) {
+        currentChartType = type;
+        document.getElementById("ct-btn-line").className =
+            `px-4 py-1.5 text-sm font-medium transition-colors ${type === "line" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400"}`;
+        document.getElementById("ct-btn-bar").className =
+            `px-4 py-1.5 text-sm font-medium transition-colors ${type === "bar" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400"}`;
+        if (trendData) {
+            renderOverviewChart();
+            if (focusCategoryId) renderFocusChart();
+        }
+    }
+
+    function toggleCategory(catId) {
+        categoryVisibility[catId] = !categoryVisibility[catId];
+        document.getElementById(`cat-toggle-${catId}`).classList.toggle("opacity-40", !categoryVisibility[catId]);
+        renderOverviewChart();
+    }
+
+    function setFocusCategory(catId) {
+        focusCategoryId = catId ? parseInt(catId) : null;
+        document.getElementById("focus-select").value = catId || "";
+        renderFocusChart();
+    }
+
+    // -----------------------------------------------------------------------
+    // Chart renders
+    // -----------------------------------------------------------------------
+
+    function renderOverviewChart() {
+        const ctx = document.getElementById("overviewChart").getContext("2d");
+        if (overviewChart) overviewChart.destroy();
+
+        const visibleCats = trendData.categories.filter(c => categoryVisibility[c.id]);
+        if (visibleCats.length === 0) { overviewChart = null; return; }
+
+        const manyPoints = trendData.labels.length > 90;
+
+        const datasets = visibleCats.map(cat => {
+            const idx    = trendData.categories.findIndex(c => c.id === cat.id);
+            const colour = COLOURS[idx % COLOURS.length];
+            if (currentChartType === "bar") {
+                return {
+                    type:             "bar",
+                    label:            cat.name,
+                    data:             cat.monthly,
+                    backgroundColor:  colour + "99",
+                    borderColor:      colour,
+                    borderWidth:      1,
+                    borderRadius:     3,
+                    catId:            cat.id
+                };
+            }
+            return {
+                type:             "line",
+                label:            cat.name,
+                data:             cat.monthly,
+                borderColor:      colour,
+                backgroundColor:  colour + "33",
+                borderWidth:      2,
+                pointRadius:      manyPoints ? 0 : 3,
+                pointHoverRadius: 5,
+                tension:          0.3,
+                fill:             false,
+                catId:            cat.id
+            };
+        });
+
+        overviewChart = new Chart(ctx, {
+            type: currentChartType === "bar" ? "bar" : "line",
+            data: { labels: trendData.labels, datasets },
+            options: {
+                responsive: true,
+                interaction: { mode: "index", intersect: false },
+                onClick: (evt, elements) => {
+                    if (elements.length > 0) {
+                        const catId = datasets[elements[0].datasetIndex].catId;
+                        setFocusCategory(catId);
+                        document.getElementById("focus-select").value = catId;
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: "#1f2937",
+                        titleColor:      "#f3f4f6",
+                        bodyColor:       "#d1d5db",
+                        borderColor:     "#374151",
+                        borderWidth:     1,
+                        callbacks: {
+                            label: ctx => ` ${ctx.dataset.label}: £${ctx.parsed.y.toLocaleString("en-GB", {minimumFractionDigits:2})}`
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid:  { color: "rgba(255,255,255,0.05)" },
+                        ticks: { color: "#6b7280", font: { size: 11 }, maxTicksLimit: 24 }
+                    },
+                    y: {
+                        grid:  { color: "rgba(255,255,255,0.05)" },
+                        ticks: { color: "#6b7280", font: { size: 11 },
+                            callback: v => "£" + v.toLocaleString("en-GB") },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+
+    function renderFocusChart() {
+        const ctx       = document.getElementById("focusChart").getContext("2d");
+        const emptyEl   = document.getElementById("focus-empty");
+        const summaryEl = document.getElementById("focus-summary");
+        const titleEl   = document.getElementById("focus-title");
+
+        if (focusChart) { focusChart.destroy(); focusChart = null; }
+
+        if (!focusCategoryId || !trendData) {
+            titleEl.textContent = "—";
+            emptyEl.classList.add("hidden");
+            summaryEl.classList.add("hidden");
+            return;
+        }
+
+        const cat = trendData.categories.find(c => c.id === focusCategoryId);
+        if (!cat) return;
+
+        titleEl.textContent = cat.name;
+
+        const nonZero = cat.monthly.filter(v => v > 0);
+        if (nonZero.length === 0) {
+            emptyEl.classList.remove("hidden");
+            summaryEl.classList.add("hidden");
+            return;
+        }
+        emptyEl.classList.add("hidden");
+
+        const idx    = trendData.categories.findIndex(c => c.id === focusCategoryId);
+        const colour = COLOURS[idx % COLOURS.length];
+        const manyPoints = trendData.labels.length > 90;
+
+        const dataset = currentChartType === "bar"
+            ? {
+                type:            "bar",
+                label:           cat.name,
+                data:            cat.monthly,
+                backgroundColor: colour + "99",
+                borderColor:     colour,
+                borderWidth:     1,
+                borderRadius:    4
+              }
+            : {
+                type:             "line",
+                label:            cat.name,
+                data:             cat.monthly,
+                borderColor:      colour,
+                backgroundColor:  colour + "33",
+                borderWidth:      2,
+                pointRadius:      manyPoints ? 0 : 3,
+                pointHoverRadius: 5,
+                tension:          0.3,
+                fill:             true
+              };
+
+        focusChart = new Chart(ctx, {
+            type: currentChartType === "bar" ? "bar" : "line",
+            data: { labels: trendData.labels, datasets: [dataset] },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: "#1f2937",
+                        titleColor:      "#f3f4f6",
+                        bodyColor:       "#d1d5db",
+                        borderColor:     "#374151",
+                        borderWidth:     1,
+                        callbacks: {
+                            label: ctx => ` £${ctx.parsed.y.toLocaleString("en-GB", {minimumFractionDigits:2})}`
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid:  { color: "rgba(255,255,255,0.05)" },
+                        ticks: { color: "#6b7280", font: { size: 11 }, maxTicksLimit: 24 }
+                    },
+                    y: {
+                        grid:  { color: "rgba(255,255,255,0.05)" },
+                        ticks: { color: "#6b7280", font: { size: 11 },
+                            callback: v => "£" + v.toLocaleString("en-GB") },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        // Summary stats — "period" wording works for all granularities
+        const total  = nonZero.reduce((a, b) => a + b, 0);
+        const avg    = total / nonZero.length;
+        const max    = Math.max(...nonZero);
+        const fmt    = v => "£" + v.toLocaleString("en-GB", {minimumFractionDigits:2});
+        const statCls = currentMode === "income" ? "text-emerald-400" : "text-red-400";
+
+        ["focus-avg","focus-max","focus-total"].forEach(id => {
+            document.getElementById(id).className = `font-mono font-medium ${statCls}`;
+        });
+        document.getElementById("focus-avg").textContent   = fmt(avg);
+        document.getElementById("focus-max").textContent   = fmt(max);
+        document.getElementById("focus-total").textContent = fmt(total);
+        summaryEl.classList.remove("hidden");
+    }
+
+    // -----------------------------------------------------------------------
+    // Data load
+    // -----------------------------------------------------------------------
+
+    async function load() {
+        const response = await fetch(
+            `/api/reports/category-trends?period=${currentPeriod}&granularity=${currentGranularity}&mode=${currentMode}`
+        );
+        trendData = await response.json();
+
+        const emptyEl = document.getElementById("overview-empty");
+
+        if (!trendData.categories || trendData.categories.length === 0) {
+            emptyEl.classList.remove("hidden");
+            document.getElementById("overviewChart").classList.add("hidden");
+            document.getElementById("category-toggles").innerHTML = "";
+            if (overviewChart) { overviewChart.destroy(); overviewChart = null; }
+            return;
+        }
+
+        emptyEl.classList.add("hidden");
+        document.getElementById("overviewChart").classList.remove("hidden");
+
+        // Initialise visibility — all on by default for new categories
+        trendData.categories.forEach(c => {
+            if (!(c.id in categoryVisibility)) categoryVisibility[c.id] = true;
+        });
+
+        // Build toggle buttons
+        document.getElementById("category-toggles").innerHTML = trendData.categories.map((cat, i) => {
+            const colour  = COLOURS[i % COLOURS.length];
+            const visible = categoryVisibility[cat.id];
+            return `
+                <button id="cat-toggle-${cat.id}"
+                    onclick="toggleCategory(${cat.id})"
+                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-colors ${visible ? "" : "opacity-40"}"
+                    style="border-color:${colour}; color:${colour};">
+                    <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${colour}"></span>
+                    ${cat.name}
+                </button>`;
+        }).join("");
+
+        // Populate focus dropdown, preserving current selection if still valid
+        const focusSelect = document.getElementById("focus-select");
+        const prevFocus   = focusSelect.value;
+        focusSelect.innerHTML = '<option value="">— Select category —</option>' +
+            trendData.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
+        if (prevFocus && trendData.categories.find(c => c.id == prevFocus)) {
+            focusSelect.value = prevFocus;
+        } else {
+            focusCategoryId = null;
+        }
+
+        renderOverviewChart();
+        if (focusCategoryId) renderFocusChart();
+    }
+
+    load();
+</script>
+{% endblock %}

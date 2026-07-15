@@ -1,0 +1,399 @@
+{% extends "layout.html" %}
+{% block title %}Notes — Finance Tracker{% endblock %}
+
+{% block content %}
+
+<!-- Quill CSS -->
+<link href="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.snow.css" rel="stylesheet">
+
+<style>
+    /* Dark theme overrides for Quill */
+    .ql-toolbar.ql-snow {
+        background: #1f2937;
+        border-color: #374151 !important;
+        border-radius: 0.5rem 0.5rem 0 0;
+    }
+    .ql-container.ql-snow {
+        background: #1f2937;
+        border-color: #374151 !important;
+        border-radius: 0 0 0.5rem 0.5rem;
+        font-family: 'DM Sans', sans-serif;
+        font-size: 0.875rem;
+        color: #e5e7eb;
+        min-height: 180px;
+    }
+    .ql-editor {
+        min-height: 180px;
+        color: #e5e7eb;
+        line-height: 1.6;
+    }
+    .ql-editor.ql-blank::before {
+        color: #6b7280;
+        font-style: normal;
+    }
+    /* Toolbar icons */
+    .ql-snow .ql-stroke { stroke: #9ca3af !important; }
+    .ql-snow .ql-fill  { fill:   #9ca3af !important; }
+    .ql-snow .ql-picker-label { color: #9ca3af !important; }
+    .ql-snow .ql-picker-options { background: #1f2937; border-color: #374151; }
+    .ql-snow .ql-picker-item { color: #d1d5db; }
+    .ql-snow button:hover .ql-stroke,
+    .ql-snow .ql-picker-label:hover .ql-stroke { stroke: #f9fafb !important; }
+    .ql-snow button:hover .ql-fill,
+    .ql-snow .ql-picker-label:hover .ql-fill  { fill:   #f9fafb !important; }
+    .ql-snow button.ql-active .ql-stroke { stroke: #60a5fa !important; }
+    .ql-snow button.ql-active .ql-fill  { fill:   #60a5fa !important; }
+
+    /* Rendered note content on cards */
+    .note-content h1 { font-size: 1.25rem; font-weight: 600; margin-bottom: 0.25rem; }
+    .note-content h2 { font-size: 1.1rem;  font-weight: 600; margin-bottom: 0.25rem; }
+    .note-content h3 { font-size: 1rem;    font-weight: 600; margin-bottom: 0.25rem; }
+    .note-content strong { font-weight: 600; }
+    .note-content em { font-style: italic; }
+    .note-content u  { text-decoration: underline; }
+    .note-content a  { color: #60a5fa; text-decoration: underline; }
+    .note-content a:hover { color: #93c5fd; }
+    .note-content ul { list-style: disc;    padding-left: 1.25rem; margin: 0.25rem 0; }
+    .note-content ol { list-style: decimal; padding-left: 1.25rem; margin: 0.25rem 0; }
+    .note-content li { margin-bottom: 0.1rem; }
+    .note-content blockquote {
+        border-left: 3px solid #4b5563;
+        padding-left: 0.75rem;
+        color: #9ca3af;
+        margin: 0.25rem 0;
+    }
+    .note-content p { margin-bottom: 0.25rem; }
+    .note-content p:last-child { margin-bottom: 0; }
+</style>
+
+<div class="p-8">
+
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-semibold">Notes</h1>
+        <button onclick="openModal()"
+            class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Add Note
+        </button>
+    </div>
+
+    <div id="notes-empty" class="hidden text-gray-500 text-sm">No notes yet. Add one using the button above.</div>
+    <div id="notes-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"></div>
+
+</div>
+
+
+<!-- Add Note Modal -->
+<div id="modal-backdrop"
+    class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 hidden"
+    onclick="handleBackdropClick(event)">
+
+    <div class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-2xl mx-4 flex flex-col gap-4">
+
+        <div class="flex items-center justify-between">
+            <h2 class="text-lg font-medium">Add Note</h2>
+            <button onclick="closeModal()" class="text-gray-500 hover:text-gray-300 transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+
+        <input id="new-title" type="text" placeholder="Title"
+            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+
+        <!-- Quill editor for new note -->
+        <div id="new-editor-container">
+            <div id="new-quill-editor"></div>
+        </div>
+
+        <div id="add-error" class="text-red-400 text-sm hidden"></div>
+
+        <div class="flex gap-3 justify-end">
+            <button onclick="closeModal()"
+                class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-lg px-5 py-2 transition-colors">
+                Cancel
+            </button>
+            <button onclick="addNote()"
+                class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg px-5 py-2 transition-colors">
+                Save Note
+            </button>
+        </div>
+
+    </div>
+</div>
+
+
+<!-- Quill JS -->
+<script src="https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js"></script>
+
+<script>
+    let allNotes    = [];
+    let newQuill    = null;   // Quill instance for the Add modal
+    let editQuills  = {};     // Quill instances keyed by note id for inline edit
+
+    const TOOLBAR = [
+        [{ header: [1, 2, 3, false] }],
+        ["bold", "italic", "underline"],
+        [{ list: "ordered" }, { list: "bullet" }],
+        ["link", "blockquote"],
+        ["clean"]
+    ];
+
+    // Initialise the Add modal's Quill editor once on page load
+    newQuill = new Quill("#new-quill-editor", {
+        theme: "snow",
+        placeholder: "Content",
+        modules: { toolbar: TOOLBAR }
+    });
+
+    // Make links open in a new tab
+    newQuill.on("text-change", () => fixLinks());
+
+
+    // --- Modal ---
+
+    function openModal() {
+        document.getElementById("new-title").value = "";
+        newQuill.setContents([]);
+        document.getElementById("add-error").classList.add("hidden");
+        document.getElementById("modal-backdrop").classList.remove("hidden");
+        setTimeout(() => document.getElementById("new-title").focus(), 50);
+    }
+
+    function closeModal() {
+        document.getElementById("modal-backdrop").classList.add("hidden");
+    }
+
+    function handleBackdropClick(e) {
+        if (e.target === document.getElementById("modal-backdrop")) closeModal();
+    }
+
+    document.addEventListener("keydown", e => {
+        if (e.key === "Escape") closeModal();
+    });
+
+
+    // --- Ensure all links open in new tab ---
+    function fixLinks() {
+        document.querySelectorAll(".note-content a, .ql-editor a").forEach(a => {
+            a.setAttribute("target", "_blank");
+            a.setAttribute("rel", "noopener noreferrer");
+        });
+    }
+
+
+    // --- Load & render ---
+
+    async function loadNotes() {
+        const res = await fetch("/api/notes");
+        allNotes = await res.json();
+        // Preserve editing state across reloads
+        renderNotes();
+    }
+
+    function renderNotes() {
+        const grid  = document.getElementById("notes-grid");
+        const empty = document.getElementById("notes-empty");
+
+        if (allNotes.length === 0) {
+            empty.classList.remove("hidden");
+            grid.innerHTML = "";
+            return;
+        }
+        empty.classList.add("hidden");
+
+        grid.innerHTML = allNotes.map((note, idx) => {
+            const isFirst = idx === 0;
+            const isLast  = idx === allNotes.length - 1;
+            const ts      = formatTimestamp(note.updated_at || note.created_at);
+            const editing = note._editing || false;
+
+            if (editing) {
+                return `
+                    <div class="bg-gray-900 border border-blue-600 rounded-xl p-5 flex flex-col gap-3" id="note-card-${note.id}">
+                        <input id="edit-title-${note.id}" type="text" value="${escHtml(note.title)}"
+                            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 focus:outline-none focus:border-blue-500 font-medium">
+                        <div id="edit-editor-${note.id}"></div>
+                        <div class="flex gap-2 mt-1">
+                            <button onclick="saveEdit(${note.id})"
+                                class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg px-4 py-1.5 transition-colors">Save</button>
+                            <button onclick="cancelEdit(${note.id})"
+                                class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-lg px-4 py-1.5 transition-colors">Cancel</button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 flex flex-col gap-3" id="note-card-${note.id}">
+
+                    <div class="flex items-start justify-between gap-2">
+                        <h3 class="font-semibold text-gray-100 leading-snug">${escHtml(note.title)}</h3>
+                        <div class="flex flex-col gap-0.5 flex-shrink-0">
+                            <button onclick="moveNote(${note.id}, 'up')" ${isFirst ? 'disabled' : ''}
+                                class="text-gray-500 hover:text-gray-300 disabled:opacity-20 disabled:cursor-not-allowed transition-colors px-1">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"/>
+                                </svg>
+                            </button>
+                            <button onclick="moveNote(${note.id}, 'down')" ${isLast ? 'disabled' : ''}
+                                class="text-gray-500 hover:text-gray-300 disabled:opacity-20 disabled:cursor-not-allowed transition-colors px-1">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Rendered HTML content -->
+                    <div class="note-content text-gray-300 text-sm leading-relaxed flex-1">${note.body || ''}</div>
+
+                    <div class="flex items-center justify-between pt-2 border-t border-gray-800">
+                        <span class="text-xs text-gray-600">${ts}</span>
+                        <div class="flex gap-3">
+                            <button onclick="startEdit(${note.id})"
+                                class="text-xs text-blue-400 hover:text-blue-300 transition-colors">Edit</button>
+                            <button onclick="archiveNote(${note.id})"
+                                class="text-xs text-gray-600 hover:text-red-400 transition-colors">Delete</button>
+                        </div>
+                    </div>
+
+                </div>
+            `;
+        }).join("");
+
+        // Initialise Quill for any cards in edit mode
+        allNotes.forEach(note => {
+            if (note._editing) {
+                initEditQuill(note);
+            }
+        });
+
+        // Fix all links after render
+        setTimeout(fixLinks, 100);
+    }
+
+    function initEditQuill(note) {
+        const container = document.getElementById(`edit-editor-${note.id}`);
+        if (!container) return;
+
+        const q = new Quill(container, {
+            theme: "snow",
+            modules: { toolbar: TOOLBAR }
+        });
+
+        // Load existing HTML content into the editor
+        if (note.body) {
+            q.clipboard.dangerouslyPasteHTML(note.body);
+        }
+
+        editQuills[note.id] = q;
+
+        setTimeout(() => {
+            const titleEl = document.getElementById(`edit-title-${note.id}`);
+            if (titleEl) titleEl.focus();
+        }, 50);
+    }
+
+
+    // --- Helpers ---
+
+    function escHtml(str) {
+        if (!str) return "";
+        return str
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+    }
+
+
+    // --- CRUD ---
+
+    async function addNote() {
+        const title = document.getElementById("new-title").value.trim();
+        const body  = newQuill.root.innerHTML.trim();
+        const err   = document.getElementById("add-error");
+        err.classList.add("hidden");
+
+        if (!title) {
+            err.textContent = "Please enter a title.";
+            err.classList.remove("hidden");
+            return;
+        }
+
+        // Treat an empty editor (just <p><br></p>) as empty string
+        const cleanBody = newQuill.getText().trim() === "" ? "" : body;
+
+        const res = await fetch("/api/notes", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title, body: cleanBody })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+            err.textContent = data.error;
+            err.classList.remove("hidden");
+            return;
+        }
+
+        closeModal();
+        loadNotes();
+    }
+
+    function startEdit(id) {
+        const note = allNotes.find(n => n.id === id);
+        if (!note) return;
+        note._editing = true;
+        renderNotes();
+    }
+
+    function cancelEdit(id) {
+        const note = allNotes.find(n => n.id === id);
+        if (!note) return;
+        note._editing = false;
+        delete editQuills[id];
+        renderNotes();
+    }
+
+    async function saveEdit(id) {
+        const title = document.getElementById(`edit-title-${id}`).value.trim();
+        if (!title) return;
+
+        const q = editQuills[id];
+        const body = q ? (q.getText().trim() === "" ? "" : q.root.innerHTML.trim()) : "";
+
+        const res = await fetch(`/api/notes/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title, body })
+        });
+
+        if (res.ok) {
+            delete editQuills[id];
+            loadNotes();
+        }
+    }
+
+    async function archiveNote(id) {
+        if (!confirm("Delete this note? It will be removed from view.")) return;
+        await fetch(`/api/notes/${id}/archive`, { method: "POST" });
+        loadNotes();
+    }
+
+    async function moveNote(id, direction) {
+        await fetch(`/api/notes/${id}/move`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ direction })
+        });
+        loadNotes();
+    }
+
+    loadNotes();
+</script>
+{% endblock %}

@@ -1,0 +1,233 @@
+{% extends "layout.html" %}
+{% block title %}Finance Tracker{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto p-8">
+
+    <h1 class="text-2xl font-semibold mb-6">Payees</h1>
+
+    <!-- Add Payee Form -->
+    <div class="bg-gray-900 rounded-xl p-6 mb-8">
+        <h2 class="text-lg font-medium mb-4">Add Payee</h2>
+        <div class="space-y-4">
+
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Payee Name</label>
+                <input id="name" type="text" placeholder="e.g. Tesco"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+            </div>
+
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Default Category <span class="text-gray-600">(optional)</span></label>
+                <select id="default_category_id"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+                    <option value="">— No default —</option>
+                </select>
+            </div>
+
+            <div id="add-error" class="text-red-400 text-sm hidden"></div>
+
+            <button onclick="addPayee()"
+                class="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg px-4 py-2 transition-colors">
+                Add Payee
+            </button>
+        </div>
+    </div>
+
+    <!-- Payees List -->
+    <div class="bg-gray-900 rounded-xl p-6">
+        <h2 class="text-lg font-medium mb-4">All Payees</h2>
+        <div id="payees-list">
+            <p class="text-gray-500 text-sm">Loading...</p>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    let categoryOptions = "";
+
+    async function loadCategories() {
+        const response = await fetch("/api/categories");
+        const categories = await response.json();
+
+        const parents = categories.filter(c => !c.parent_id);
+        const childrenMap = {};
+        categories.filter(c => c.parent_id).forEach(c => {
+            if (!childrenMap[c.parent_id]) childrenMap[c.parent_id] = [];
+            childrenMap[c.parent_id].push(c);
+        });
+
+        // Build options HTML for reuse in both add form and edit rows
+        categoryOptions = '<option value="">— No default —</option>';
+        parents.forEach(parent => {
+            const kids = childrenMap[parent.id] || [];
+            if (kids.length === 0) {
+                categoryOptions += `<option value="${parent.id}">${parent.name}</option>`;
+            } else {
+                categoryOptions += `<optgroup label="${parent.name}">`;
+                kids.forEach(child => {
+                    categoryOptions += `<option value="${child.id}">${child.name}</option>`;
+                });
+                categoryOptions += `</optgroup>`;
+            }
+        });
+
+        // Populate the add form dropdown
+        document.getElementById("default_category_id").innerHTML = categoryOptions;
+    }
+
+    async function loadPayees() {
+        const response = await fetch("/api/payees");
+        const payees = await response.json();
+        const container = document.getElementById("payees-list");
+
+        if (payees.length === 0) {
+            container.innerHTML = '<p class="text-gray-500 text-sm">No payees yet.</p>';
+            return;
+        }
+
+        container.innerHTML = payees.map(p => {
+            let categoryLabel;
+            if (p.default_category_name) {
+                categoryLabel = p.default_parent_category_name
+                    ? `Default · ${p.default_parent_category_name} · ${p.default_category_name}`
+                    : `Default · ${p.default_category_name}`;
+            } else {
+                categoryLabel = "Default · None";
+            }
+
+            return `
+            <div class="border-b border-gray-800 last:border-0" id="payee-row-${p.id}">
+
+                <!-- Display row -->
+                <div class="flex justify-between items-center py-3" id="payee-display-${p.id}">
+                    <div>
+                        <p class="font-medium">${p.name}</p>
+                        <p class="text-sm text-gray-400">${categoryLabel}</p>
+                    </div>
+                    <div class="flex gap-3">
+                        <button onclick="showEditPayee(${p.id})"
+                            class="text-xs text-gray-500 hover:text-blue-400 transition-colors">Edit</button>
+                        <button onclick="deactivatePayee(${p.id}, '${p.name.replace(/'/g,"\\'")}' )"
+                            class="text-xs text-gray-500 hover:text-red-400 transition-colors">Deactivate</button>
+                    </div>
+                </div>
+
+                <!-- Edit row -->
+                <div class="hidden pb-4 space-y-3" id="payee-edit-${p.id}">
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Name</label>
+                        <input id="edit-payee-name-${p.id}" type="text" value="${p.name}"
+                            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Default Category</label>
+                        <select id="edit-payee-cat-${p.id}"
+                            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                            ${categoryOptions}
+                        </select>
+                    </div>
+                    <div id="edit-payee-error-${p.id}" class="text-red-400 text-xs hidden"></div>
+                    <div class="flex gap-2">
+                        <button onclick="savePayee(${p.id})"
+                            class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg px-4 py-1.5 transition-colors">Save</button>
+                        <button onclick="cancelEditPayee(${p.id})"
+                            class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-medium rounded-lg px-4 py-1.5 transition-colors">Cancel</button>
+                    </div>
+                </div>
+
+            </div>
+            `;
+        }).join("");
+
+        // Set correct selected category in each edit dropdown
+        payees.forEach(p => {
+            const sel = document.getElementById(`edit-payee-cat-${p.id}`);
+            if (sel && p.default_category_id) sel.value = p.default_category_id;
+        });
+    }
+
+    function showEditPayee(id) {
+        document.getElementById(`payee-display-${id}`).classList.add("hidden");
+        document.getElementById(`payee-edit-${id}`).classList.remove("hidden");
+    }
+
+    function cancelEditPayee(id) {
+        document.getElementById(`payee-display-${id}`).classList.remove("hidden");
+        document.getElementById(`payee-edit-${id}`).classList.add("hidden");
+        const errEl = document.getElementById(`edit-payee-error-${id}`);
+        if (errEl) errEl.classList.add("hidden");
+    }
+
+    async function savePayee(id) {
+        const payload = {
+            name:               document.getElementById(`edit-payee-name-${id}`).value.trim(),
+            default_category_id: document.getElementById(`edit-payee-cat-${id}`).value || null
+        };
+
+        const errEl = document.getElementById(`edit-payee-error-${id}`);
+        if (errEl) errEl.classList.add("hidden");
+
+        if (!payload.name) {
+            if (errEl) { errEl.textContent = "Payee name is required."; errEl.classList.remove("hidden"); }
+            return;
+        }
+
+        const response = await fetch(`/api/payees/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+            loadPayees();
+        } else {
+            const result = await response.json();
+            if (errEl) { errEl.textContent = result.error || "Failed to save."; errEl.classList.remove("hidden"); }
+        }
+    }
+
+    async function deactivatePayee(id, name) {
+        if (!confirm(`Deactivate "${name}"? They will no longer appear in the payee dropdown.`)) return;
+        const response = await fetch(`/api/payees/${id}/deactivate`, { method: "POST" });
+        if (response.ok) loadPayees();
+    }
+
+    async function addPayee() {
+        const errorBox = document.getElementById("add-error");
+        errorBox.classList.add("hidden");
+
+        const payload = {
+            name:               document.getElementById("name").value.trim(),
+            default_category_id: document.getElementById("default_category_id").value || null
+        };
+
+        if (!payload.name) {
+            errorBox.textContent = "Payee name is required.";
+            errorBox.classList.remove("hidden");
+            return;
+        }
+
+        const response = await fetch("/api/payees", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+            errorBox.textContent = result.error;
+            errorBox.classList.remove("hidden");
+            return;
+        }
+
+        document.getElementById("name").value = "";
+        document.getElementById("default_category_id").value = "";
+        loadPayees();
+    }
+
+    // Load categories first, then payees so dropdowns are ready
+    loadCategories().then(() => loadPayees());
+</script>
+{% endblock %}

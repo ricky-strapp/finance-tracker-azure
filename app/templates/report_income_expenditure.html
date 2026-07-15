@@ -1,0 +1,341 @@
+{% extends "layout.html" %}
+{% block title %}Finance Tracker{% endblock %}
+
+{% block content %}
+<div class="p-8">
+
+    <h1 class="text-2xl font-semibold mb-6">Income vs Expenditure</h1>
+
+    <div class="bg-gray-900 rounded-xl p-6">
+
+        <!-- Controls row -->
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+
+            <!-- Left: period + granularity + net line toggle -->
+            <div class="flex items-center gap-3 flex-wrap">
+
+                <!-- Period -->
+                <div class="flex rounded-lg overflow-hidden border border-gray-700">
+                    <button onclick="setPeriod('all')" id="period-all"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-blue-600 text-white">All Time</button>
+                    <button onclick="setPeriod('12m')" id="period-12m"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">12 Months</button>
+                    <button onclick="setPeriod('6m')" id="period-6m"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">6 Months</button>
+                    <button onclick="setPeriod('3m')" id="period-3m"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">3 Months</button>
+                    <button onclick="setPeriod('1m')" id="period-1m"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">This Month</button>
+                </div>
+
+                <!-- Granularity -->
+                <div class="flex rounded-lg overflow-hidden border border-gray-700">
+                    <button onclick="setGranularity('month')" id="gran-month"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-blue-600 text-white">Monthly</button>
+                    <button onclick="setGranularity('week')" id="gran-week"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">Weekly</button>
+                    <button onclick="setGranularity('day')" id="gran-day"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">Daily</button>
+                </div>
+
+                <!-- Net line toggle -->
+                <div class="flex rounded-lg overflow-hidden border border-gray-700">
+                    <button onclick="setNetLine(true)" id="net-on"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-blue-600 text-white">Net Line On</button>
+                    <button onclick="setNetLine(false)" id="net-off"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">Net Line Off</button>
+                </div>
+
+            </div>
+
+            <!-- Right: Line / Bar -->
+            <div class="flex rounded-lg overflow-hidden border border-gray-700">
+                <button id="ie-btn-line" onclick="setChartType('line')"
+                    class="px-4 py-1.5 text-sm font-medium transition-colors bg-blue-600 text-white">Line</button>
+                <button id="ie-btn-bar" onclick="setChartType('bar')"
+                    class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">Bar</button>
+            </div>
+
+        </div>
+
+        <!-- Chart -->
+        <div class="mb-4">
+            <canvas id="incExpChart" height="100"></canvas>
+        </div>
+
+        <!-- Legend -->
+        <div class="flex items-center gap-5 mt-2 flex-wrap">
+            <span class="flex items-center gap-1.5 text-sm text-gray-400">
+                <span class="w-3 h-3 rounded-sm inline-block" style="background:#34d399"></span>Income
+            </span>
+            <span class="flex items-center gap-1.5 text-sm text-gray-400">
+                <span class="w-3 h-3 rounded-sm inline-block" style="background:#f87171"></span>Expenditure
+            </span>
+            <span id="net-legend" class="flex items-center gap-1.5 text-sm text-gray-400">
+                <span class="w-5 h-0.5 inline-block" style="background:#60a5fa"></span>Net
+            </span>
+        </div>
+
+        <p id="ie-empty" class="text-gray-500 text-sm hidden mt-4">No transaction data yet.</p>
+
+        <!-- Summary table -->
+        <div id="summary-table" class="mt-8 hidden">
+            <h3 class="text-sm font-medium text-gray-400 mb-3">Summary</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-gray-500 border-b border-gray-800">
+                            <th class="text-left py-2 pr-4 font-medium">Period</th>
+                            <th class="text-right py-2 px-4 font-medium">Income</th>
+                            <th class="text-right py-2 px-4 font-medium">Expenditure</th>
+                            <th class="text-right py-2 pl-4 font-medium">Net</th>
+                        </tr>
+                    </thead>
+                    <tbody id="summary-rows" class="divide-y divide-gray-800"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+    let ieChart         = null;
+    let chartType       = "line";
+    let showNet         = true;
+    let chartData       = null;
+    let currentPeriod      = "all";
+    let currentGranularity = "month";
+
+    // Same allowed-granularity rules as Net Worth
+    const ALLOWED_GRAN = {
+        "all": ["month", "week"],
+        "12m": ["month", "week"],
+        "6m":  ["month", "week", "day"],
+        "3m":  ["month", "week", "day"],
+        "1m":  ["week",  "day"],
+    };
+
+    // -----------------------------------------------------------------------
+    // Control handlers
+    // -----------------------------------------------------------------------
+
+    function setPeriod(p) {
+        currentPeriod = p;
+        ["all","12m","6m","3m","1m"].forEach(id => {
+            document.getElementById(`period-${id}`).className =
+                `px-4 py-1.5 text-sm font-medium transition-colors ${p === id ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400"}`;
+        });
+        const allowed = ALLOWED_GRAN[p];
+        if (!allowed.includes(currentGranularity)) {
+            currentGranularity = allowed[allowed.length - 1];
+        }
+        updateGranularityButtons();
+        load();
+    }
+
+    function setGranularity(g) {
+        if (!ALLOWED_GRAN[currentPeriod].includes(g)) return;
+        currentGranularity = g;
+        updateGranularityButtons();
+        load();
+    }
+
+    function updateGranularityButtons() {
+        const allowed = ALLOWED_GRAN[currentPeriod];
+        ["month","week","day"].forEach(g => {
+            const btn        = document.getElementById(`gran-${g}`);
+            const isActive   = g === currentGranularity;
+            const isDisabled = !allowed.includes(g);
+            if (isDisabled) {
+                btn.className = "px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-600 cursor-not-allowed";
+            } else if (isActive) {
+                btn.className = "px-4 py-1.5 text-sm font-medium transition-colors bg-blue-600 text-white";
+            } else {
+                btn.className = "px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400";
+            }
+        });
+    }
+
+    function setNetLine(on) {
+        showNet = on;
+        document.getElementById("net-on").className =
+            `px-4 py-1.5 text-sm font-medium transition-colors ${on ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400"}`;
+        document.getElementById("net-off").className =
+            `px-4 py-1.5 text-sm font-medium transition-colors ${on ? "bg-gray-800 text-gray-400" : "bg-blue-600 text-white"}`;
+        document.getElementById("net-legend").classList.toggle("hidden", !on);
+        if (chartData) renderChart();
+    }
+
+    function setChartType(type) {
+        chartType = type;
+        document.getElementById("ie-btn-line").className =
+            `px-4 py-1.5 text-sm font-medium transition-colors ${type === "line" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400"}`;
+        document.getElementById("ie-btn-bar").className =
+            `px-4 py-1.5 text-sm font-medium transition-colors ${type === "bar" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400"}`;
+        if (chartData) renderChart();
+    }
+
+    // -----------------------------------------------------------------------
+    // Chart render
+    // -----------------------------------------------------------------------
+
+    function renderChart() {
+        const ctx = document.getElementById("incExpChart").getContext("2d");
+        if (ieChart) ieChart.destroy();
+
+        const manyPoints = chartData.labels.length > 90;
+
+        const incomeDataset = {
+            type:             chartType,
+            label:            "Income",
+            data:             chartData.income,
+            backgroundColor:  chartType === "bar" ? "rgba(52,211,153,0.6)" : "rgba(52,211,153,0.15)",
+            borderColor:      "#34d399",
+            borderWidth:      chartType === "bar" ? 1 : 2,
+            borderRadius:     chartType === "bar" ? 3 : 0,
+            pointRadius:      chartType === "line" ? (manyPoints ? 0 : 3) : 0,
+            pointHoverRadius: chartType === "line" ? 5 : 0,
+            tension:          0.3,
+            fill:             chartType === "line",
+            order:            3
+        };
+
+        const expenditureDataset = {
+            type:             chartType,
+            label:            "Expenditure",
+            data:             chartData.expenditure,
+            backgroundColor:  chartType === "bar" ? "rgba(248,113,113,0.6)" : "rgba(248,113,113,0.15)",
+            borderColor:      "#f87171",
+            borderWidth:      chartType === "bar" ? 1 : 2,
+            borderRadius:     chartType === "bar" ? 3 : 0,
+            pointRadius:      chartType === "line" ? (manyPoints ? 0 : 3) : 0,
+            pointHoverRadius: chartType === "line" ? 5 : 0,
+            tension:          0.3,
+            fill:             chartType === "line",
+            order:            4
+        };
+
+        const datasets = [incomeDataset, expenditureDataset];
+
+        // Net is always a line, even in bar mode
+        if (showNet) {
+            datasets.unshift({
+                type:             "line",
+                label:            "Net",
+                data:             chartData.net,
+                borderColor:      "#60a5fa",
+                backgroundColor:  "rgba(96,165,250,0.08)",
+                borderWidth:      2,
+                pointRadius:      manyPoints ? 0 : 3,
+                pointHoverRadius: 5,
+                tension:          0.3,
+                fill:             false,
+                order:            1
+            });
+        }
+
+        // The top-level chart type must be "bar" for mixed bar+line to work correctly.
+        // Line datasets override this with their own type: "line" property.
+        ieChart = new Chart(ctx, {
+            type: "bar",
+            data: { labels: chartData.labels, datasets },
+            options: {
+                responsive: true,
+                interaction: { mode: "index", intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: "#1f2937",
+                        titleColor:      "#f3f4f6",
+                        bodyColor:       "#d1d5db",
+                        borderColor:     "#374151",
+                        borderWidth:     1,
+                        callbacks: {
+                            label: ctx => {
+                                const v   = ctx.parsed.y;
+                                const abs = Math.abs(v);
+                                const sign = v < 0 ? "−" : (ctx.dataset.label === "Net" ? "+" : "");
+                                return ` ${ctx.dataset.label}: ${sign}£${abs.toLocaleString("en-GB", {minimumFractionDigits:2})}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid:  { color: "rgba(255,255,255,0.05)" },
+                        ticks: { color: "#6b7280", font: { size: 11 }, maxTicksLimit: 24 }
+                    },
+                    y: {
+                        grid:  { color: "rgba(255,255,255,0.05)" },
+                        ticks: {
+                            color: "#6b7280",
+                            font:  { size: 11 },
+                            callback: v => {
+                                const sign = v < 0 ? "−" : "";
+                                return sign + "£" + Math.abs(v).toLocaleString("en-GB");
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Data load
+    // -----------------------------------------------------------------------
+
+    async function load() {
+        const response = await fetch(
+            `/api/reports/income-expenditure?period=${currentPeriod}&granularity=${currentGranularity}`
+        );
+        chartData = await response.json();
+
+        const emptyEl = document.getElementById("ie-empty");
+        const tableEl = document.getElementById("summary-table");
+        const canvas  = document.getElementById("incExpChart");
+
+        if (!chartData.labels || chartData.labels.length === 0) {
+            emptyEl.classList.remove("hidden");
+            canvas.classList.add("hidden");
+            tableEl.classList.add("hidden");
+            return;
+        }
+
+        emptyEl.classList.add("hidden");
+        canvas.classList.remove("hidden");
+
+        renderChart();
+
+        // Summary table — newest first
+        const tbody = document.getElementById("summary-rows");
+        tbody.innerHTML = [...chartData.labels].reverse().map((label, i) => {
+            const ri  = chartData.labels.length - 1 - i;
+            const net = chartData.net[ri];
+            const netClass = net >= 0 ? "text-emerald-400" : "text-red-400";
+            const netSign  = net >= 0 ? "+" : "−";
+            return `
+                <tr class="text-gray-300">
+                    <td class="py-2 pr-4">${label}</td>
+                    <td class="text-right py-2 px-4 text-emerald-400 font-mono">
+                        £${chartData.income[ri].toLocaleString("en-GB", {minimumFractionDigits:2})}
+                    </td>
+                    <td class="text-right py-2 px-4 text-red-400 font-mono">
+                        £${chartData.expenditure[ri].toLocaleString("en-GB", {minimumFractionDigits:2})}
+                    </td>
+                    <td class="text-right py-2 pl-4 ${netClass} font-mono">
+                        ${netSign}£${Math.abs(net).toLocaleString("en-GB", {minimumFractionDigits:2})}
+                    </td>
+                </tr>
+            `;
+        }).join("");
+
+        tableEl.classList.remove("hidden");
+    }
+
+    load();
+</script>
+{% endblock %}

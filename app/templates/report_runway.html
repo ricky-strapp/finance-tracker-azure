@@ -1,0 +1,357 @@
+{% extends "layout.html" %}
+{% block title %}Finance Tracker{% endblock %}
+
+{% block content %}
+<div class="p-8">
+
+    <h1 class="text-2xl font-semibold mb-6">Savings Runway</h1>
+
+    <!-- Controls card -->
+    <div class="bg-gray-900 rounded-xl p-6 mb-6">
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+            <div>
+                <div class="flex rounded-lg overflow-hidden border border-gray-700">
+                    <button onclick="setPeriod('all')" id="period-all"
+                        class="flex-1 px-4 py-1.5 text-sm font-medium transition-colors bg-blue-600 text-white">All Time</button>
+                    <button onclick="setPeriod('12m')" id="period-12m"
+                        class="flex-1 px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">12 Months</button>
+                    <button onclick="setPeriod('6m')" id="period-6m"
+                        class="flex-1 px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">6 Months</button>
+                    <button onclick="setPeriod('3m')" id="period-3m"
+                        class="flex-1 px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">3 Months</button>
+                    <button onclick="setPeriod('1m')" id="period-1m"
+                        class="flex-1 px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">This Month</button>
+                </div>
+                
+                <div class="flex items-center gap-3 mt-1.5">
+                    <div class="flex items-center gap-1.5">
+                        <p class="text-xs text-gray-600">Averaging data from:</p>
+                        <span id="start-date-display" class="text-xs text-gray-500 font-mono"></span>
+                        <button onclick="openStartDateEdit()" id="start-date-edit-btn"
+                            class="text-xs text-gray-600 hover:text-blue-400 transition-colors underline">edit</button>
+                        <span id="start-date-edit-wrap" class="hidden flex items-center gap-1.5">
+                            <input id="start-date-input" type="date"
+                                class="bg-gray-800 border border-gray-700 rounded px-2 py-0.5 text-xs text-gray-100 focus:outline-none focus:border-blue-500">
+                            <button onclick="saveStartDate()"
+                                class="text-xs text-blue-400 hover:text-blue-300 transition-colors">save</button>
+                            <button onclick="cancelStartDateEdit()"
+                                class="text-xs text-gray-600 hover:text-gray-400 transition-colors">cancel</button>
+                        </span>
+                    </div>
+
+                    <p id="period-warning" class="text-xs text-amber-500 hidden border-l border-gray-700 pl-3">
+                        Partial month — may not be representative.
+                    </p>
+                </div>
+            </div>
+
+            <div>
+                <div class="flex rounded-lg overflow-hidden border border-gray-700">
+                    <button onclick="setMode('net')" id="mode-net"
+                        class="flex-1 px-4 py-1.5 text-sm font-medium transition-colors bg-blue-600 text-white">Net (Spend − Income)</button>
+                    <button onclick="setMode('spend')" id="mode-spend"
+                        class="flex-1 px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">Spend Only</button>
+                </div>
+                <p class="text-xs text-gray-600 mt-1.5" id="mode-hint">How long your funds last based on net cash flow (spend minus income).</p>
+            </div>
+
+        </div>
+
+        <!-- Account selection -->
+        <div class="mt-4">
+            <p class="text-sm text-gray-400 mb-2">Accounts to include</p>
+            <div id="account-checkboxes" class="flex flex-wrap gap-2"></div>
+        </div>
+
+    </div>
+
+    <!-- Runway result cards -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+
+        <div class="bg-gray-900 rounded-xl p-6 lg:col-span-1">
+            <p class="text-sm text-gray-400 mb-1">Available funds</p>
+            <p id="available-funds" class="text-3xl font-semibold font-mono text-emerald-400">—</p>
+            <p class="text-xs text-gray-600 mt-1">from selected accounts</p>
+        </div>
+
+        <div class="bg-gray-900 rounded-xl p-6 lg:col-span-1">
+            <p class="text-sm text-gray-400 mb-1" id="monthly-label">Average monthly net</p>
+            <p id="monthly-amount" class="text-3xl font-semibold font-mono text-red-400">—</p>
+            <p class="text-xs text-gray-600 mt-1" id="monthly-sub">—</p>
+        </div>
+
+        <div class="bg-gray-900 rounded-xl p-6 lg:col-span-1 border border-blue-900">
+            <p class="text-sm text-gray-400 mb-1">Runway</p>
+            <p id="runway-months" class="text-3xl font-semibold font-mono text-blue-400">—</p>
+            <p id="runway-date" class="text-xs text-gray-600 mt-1">—</p>
+        </div>
+
+    </div>
+
+    <!-- Projection chart -->
+    <div class="bg-gray-900 rounded-xl p-6">
+        <canvas id="projectionChart" height="80"></canvas>
+        <p id="chart-empty" class="text-gray-500 text-sm hidden">Not enough data to project.</p>
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+    let currentPeriod    = "all";
+    let currentMode      = "net";
+    let allAccounts      = [];
+    let selectedAccounts = new Set();
+    let projChart        = null;
+
+    // -----------------------------------------------------------------------
+    // Control handlers
+    // -----------------------------------------------------------------------
+
+    function setPeriod(p) {
+        currentPeriod = p;
+        ["all","12m","6m","3m","1m"].forEach(id => {
+            document.getElementById(`period-${id}`).className =
+                `flex-1 px-4 py-1.5 text-sm font-medium transition-colors ${p === id ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400"}`;
+        });
+        // Show warning only for This Month
+        document.getElementById("period-warning").classList.toggle("hidden", p !== "1m");
+        calculate();
+    }
+
+    function setMode(m) {
+        currentMode = m;
+        document.getElementById("mode-net").className =
+            `flex-1 px-4 py-1.5 text-sm font-medium transition-colors ${m === "net" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400"}`;
+        document.getElementById("mode-spend").className =
+            `flex-1 px-4 py-1.5 text-sm font-medium transition-colors ${m === "spend" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400"}`;
+        document.getElementById("mode-hint").textContent = m === "spend"
+            ? "How long your funds last covering spending with no income."
+            : "How long your funds last based on net cash flow (spend minus income).";
+        calculate();
+    }
+
+    function toggleAccount(id) {
+        if (selectedAccounts.has(id)) {
+            selectedAccounts.delete(id);
+        } else {
+            selectedAccounts.add(id);
+        }
+        const selected = selectedAccounts.has(id);
+        document.getElementById(`acct-btn-${id}`).className =
+            `px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                selected ? "bg-blue-900 border-blue-700 text-blue-300" : "bg-gray-800 border-gray-700 text-gray-500"
+            }`;
+        calculate();
+    }
+
+    // -----------------------------------------------------------------------
+    // Data
+    // -----------------------------------------------------------------------
+
+    async function loadAccounts() {
+        const response = await fetch("/api/accounts");
+        allAccounts    = await response.json();
+        allAccounts.forEach(a => selectedAccounts.add(a.id));
+
+        document.getElementById("account-checkboxes").innerHTML = allAccounts.map(a => `
+            <button id="acct-btn-${a.id}" onclick="toggleAccount(${a.id})"
+                class="px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors bg-blue-900 border-blue-700 text-blue-300">
+                ${a.name}
+            </button>
+        `).join("");
+
+        calculate();
+    }
+
+    async function calculate() {
+        if (selectedAccounts.size === 0) {
+            document.getElementById("available-funds").textContent = "£0.00";
+            document.getElementById("monthly-amount").textContent  = "—";
+            document.getElementById("runway-months").textContent   = "—";
+            document.getElementById("runway-date").textContent     = "Select at least one account";
+            return;
+        }
+
+        const params = new URLSearchParams({
+            period:   currentPeriod,
+            mode:     currentMode,
+            accounts: [...selectedAccounts].join(",")
+        });
+
+        const response = await fetch(`/api/reports/runway?${params}`);
+        const data     = await response.json();
+
+        document.getElementById("available-funds").textContent =
+            "£" + data.available_funds.toLocaleString("en-GB", {minimumFractionDigits:2});
+
+        const monthlyEl  = document.getElementById("monthly-amount");
+        const monthlyLbl = document.getElementById("monthly-label");
+        const monthlySub = document.getElementById("monthly-sub");
+
+        if (currentMode === "spend") {
+            monthlyLbl.textContent = "Average monthly spend";
+            monthlyEl.textContent  = "£" + data.monthly_spend.toLocaleString("en-GB", {minimumFractionDigits:2});
+            monthlyEl.className    = "text-3xl font-semibold font-mono text-red-400";
+            monthlySub.textContent = `Based on ${data.period_label}`;
+        } else {
+            monthlyLbl.textContent  = "Average monthly net cash flow";
+            const net        = data.monthly_net;
+            const cashFlow   = -net;
+            const isPositive = cashFlow >= 0;
+            const absValue   = Math.abs(cashFlow).toLocaleString("en-GB", {minimumFractionDigits:2});
+            monthlyEl.textContent = (isPositive ? "+" : "−") + "£" + absValue;
+            monthlyEl.className   = `text-3xl font-semibold font-mono ${isPositive ? "text-emerald-400" : "text-red-400"}`;
+            monthlySub.textContent = `Based on ${data.period_label}`;
+        }
+
+        const runwayEl   = document.getElementById("runway-months");
+        const runwayDate = document.getElementById("runway-date");
+
+        if (data.runway_months === null) {
+            runwayEl.textContent   = "∞";
+            runwayEl.className     = "text-3xl font-semibold font-mono text-emerald-400";
+            runwayDate.textContent = "Income exceeds spending — funds are growing";
+        } else if (data.runway_months === 0) {
+            runwayEl.textContent   = "< 1 month";
+            runwayEl.className     = "text-3xl font-semibold font-mono text-red-400";
+            runwayDate.textContent = "Critical — less than one month of runway";
+        } else {
+            const months = data.runway_months;
+            const years  = Math.floor(months / 12);
+            const rem    = months % 12;
+            let label    = "";
+            if (years > 0) label += `${years} year${years !== 1 ? "s" : ""}`;
+            if (rem > 0)   label += `${label ? " " : ""}${rem} month${rem !== 1 ? "s" : ""}`;
+            const colour = months < 3 ? "text-red-400" : months < 6 ? "text-amber-400" : "text-emerald-400";
+            runwayEl.textContent = label;
+            runwayEl.className   = `text-3xl font-semibold font-mono ${colour}`;
+            runwayDate.textContent = data.runway_date
+                ? `Funds projected to run out around ${data.runway_date}` : "";
+        }
+
+        renderProjection(data.projection);
+    }
+
+    function renderProjection(projection) {
+        const ctx     = document.getElementById("projectionChart");
+        const emptyEl = document.getElementById("chart-empty");
+
+        if (!projection || projection.length === 0) {
+            emptyEl.classList.remove("hidden");
+            ctx.classList.add("hidden");
+            return;
+        }
+
+        emptyEl.classList.add("hidden");
+        ctx.classList.remove("hidden");
+
+        if (projChart) projChart.destroy();
+
+        projChart = new Chart(ctx.getContext("2d"), {
+            type: "line",
+            data: {
+                labels:   projection.map(p => p.label),
+                datasets: [{
+                    label:           "Projected balance",
+                    data:            projection.map(p => p.balance),
+                    borderColor:     "#60a5fa",
+                    backgroundColor: "rgba(96,165,250,0.08)",
+                    borderWidth:     2,
+                    pointRadius:     2,
+                    pointHoverRadius: 5,
+                    tension:         0.3,
+                    fill:            true,
+                    segment: {
+                        borderColor:     ctx => ctx.p1.parsed.y < 0 ? "#f87171" : "#60a5fa",
+                        backgroundColor: ctx => ctx.p1.parsed.y < 0 ? "rgba(248,113,113,0.08)" : "rgba(96,165,250,0.08)"
+                    }
+                }]
+            },
+            options: {
+                responsive: true,
+                interaction: { mode: "index", intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: "#1f2937",
+                        titleColor:      "#f3f4f6",
+                        bodyColor:       "#d1d5db",
+                        borderColor:     "#374151",
+                        borderWidth:     1,
+                        callbacks: {
+                            label: ctx => {
+                                const v    = ctx.parsed.y;
+                                const sign = v < 0 ? "−" : "";
+                                return ` Projected: ${sign}£${Math.abs(v).toLocaleString("en-GB", {minimumFractionDigits:2})}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid:  { color: "rgba(255,255,255,0.05)" },
+                        ticks: { color: "#6b7280", font: { size: 11 } }
+                    },
+                    y: {
+                        grid:  { color: "rgba(255,255,255,0.05)" },
+                        ticks: {
+                            color: "#6b7280",
+                            font:  { size: 11 },
+                            callback: v => {
+                                const sign = v < 0 ? "−" : "";
+                                return sign + "£" + Math.abs(v).toLocaleString("en-GB");
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Tracking start date
+    // -----------------------------------------------------------------------
+
+    async function loadStartDate() {
+        const res  = await fetch("/api/settings/runway_start_date");
+        const data = await res.json();
+        if (data.value) {
+            const [y, m, d] = data.value.split("-");
+            document.getElementById("start-date-display").textContent = `${d}/${m}/${y}`;
+            document.getElementById("start-date-input").value = data.value;
+        }
+    }
+
+    function openStartDateEdit() {
+        document.getElementById("start-date-display").classList.add("hidden");
+        document.getElementById("start-date-edit-btn").classList.add("hidden");
+        document.getElementById("start-date-edit-wrap").classList.remove("hidden");
+    }
+
+    function cancelStartDateEdit() {
+        document.getElementById("start-date-display").classList.remove("hidden");
+        document.getElementById("start-date-edit-btn").classList.remove("hidden");
+        document.getElementById("start-date-edit-wrap").classList.add("hidden");
+    }
+
+    async function saveStartDate() {
+        const value = document.getElementById("start-date-input").value;
+        if (!value) return;
+        await fetch("/api/settings/runway_start_date", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ value })
+        });
+        const [y, m, d] = value.split("-");
+        document.getElementById("start-date-display").textContent = `${d}/${m}/${y}`;
+        cancelStartDateEdit();
+        calculate();
+    }
+
+    loadStartDate();
+    loadAccounts();
+</script>
+{% endblock %}

@@ -1,0 +1,910 @@
+{% extends "layout.html" %}
+{% block title %}Finance Tracker{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto p-8">
+
+    <h1 class="text-2xl font-semibold mb-6">Transactions</h1>
+
+    <!-- Add Transaction Form -->
+    <div class="bg-gray-900 rounded-xl p-6 mb-8">
+        <h2 class="text-lg font-medium mb-4">Add Transaction</h2>
+        <div class="space-y-4">
+
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Account</label>
+                <select id="account_id"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+                    <option value="">— Select account —</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Date</label>
+                <input id="date" type="date"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+            </div>
+
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Amount (£)</label>
+                <div class="flex gap-2">
+                    <div class="flex rounded-lg overflow-hidden border border-gray-700 flex-shrink-0 h-10">
+                        <button id="btn-in" onclick="setDirection('in')"
+                            class="px-4 text-sm font-medium transition-colors bg-emerald-600 text-white">In</button>
+                        <button id="btn-out" onclick="setDirection('out')"
+                            class="px-4 text-sm font-medium transition-colors bg-gray-800 text-gray-400">Out</button>
+                    </div>
+                    <div class="flex-1">
+                        <input id="amount" type="number" step="0.01" min="0" placeholder="0.00"
+                            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+                        <p class="text-sm text-gray-500 mt-1 flex gap-3">
+                            <span id="amount-preview"></span>
+                            <span id="new-balance-preview" class="text-gray-600"></span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Payee <span class="text-gray-600">(optional)</span></label>
+                <select id="payee_id" onchange="onPayeeChange()"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+                    <option value="">— No payee —</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Category <span class="text-gray-600">(optional)</span></label>
+                <select id="category_id"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+                    <option value="">— Uncategorised —</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Notes <span class="text-gray-600">(optional)</span></label>
+                <input id="notes" type="text" placeholder="e.g. Weekly shop"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+            </div>
+
+            <div id="error-message" class="text-red-400 text-sm hidden"></div>
+
+            <button onclick="addTransaction()"
+                class="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg px-4 py-2 transition-colors">
+                Save Transaction
+            </button>
+        </div>
+    </div>
+
+    <!-- Recent Transactions -->
+    <div class="bg-gray-900 rounded-xl p-6">
+
+        <!-- Header row with filter toggle -->
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-3">
+                <h2 class="text-lg font-medium">Recent Transactions</h2>
+                <span id="filter-count" class="hidden text-xs bg-blue-900 text-blue-300 px-2 py-0.5 rounded-full"></span>
+            </div>
+            <div class="flex items-center gap-4">
+                <button onclick="toggleVoided()"
+                    id="voided-btn"
+                    class="text-sm text-gray-400 hover:text-gray-200 flex items-center gap-1.5 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                    Show voided
+                </button>
+                <button onclick="toggleFilters()"
+                    id="filter-btn"
+                    class="text-sm text-gray-400 hover:text-gray-200 flex items-center gap-1.5 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                            d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z"/>
+                    </svg>
+                    Filter
+                </button>
+            </div>
+        </div>
+
+        <!-- Filter panel (collapsed by default) -->
+        <div id="filter-panel" class="hidden mb-5 space-y-3 pb-5 border-b border-gray-800">
+
+            <!-- Row 1: Date range + Direction -->
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">From</label>
+                    <input id="f-date-from" type="date" onchange="applyFilters()"
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">To</label>
+                    <input id="f-date-to" type="date" onchange="applyFilters()"
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Direction</label>
+                    <select id="f-direction" onchange="applyFilters()"
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                        <option value="">In & Out</option>
+                        <option value="in">In only</option>
+                        <option value="out">Out only</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Row 2: Account + Category + Payee -->
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Account</label>
+                    <select id="f-account" onchange="applyFilters()"
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                        <option value="">All accounts</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Category</label>
+                    <select id="f-category" onchange="applyFilters()"
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                        <option value="">All categories</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Payee</label>
+                    <select id="f-payee" onchange="applyFilters()"
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                        <option value="">All payees</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Row 3: Amount range + Notes search -->
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Min amount (£)</label>
+                    <input id="f-amount-min" type="number" step="0.01" min="0" placeholder="0.00"
+                        oninput="applyFilters()"
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Max amount (£)</label>
+                    <input id="f-amount-max" type="number" step="0.01" min="0" placeholder="0.00"
+                        oninput="applyFilters()"
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Search notes</label>
+                    <input id="f-notes" type="text" placeholder="keyword…"
+                        oninput="applyFilters()"
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                </div>
+            </div>
+
+            <!-- Clear button -->
+            <div class="flex justify-end">
+                <button onclick="clearFilters()"
+                    class="text-xs text-gray-500 hover:text-gray-300 transition-colors">
+                    Clear all filters
+                </button>
+            </div>
+
+        </div>
+
+        <!-- Transaction list -->
+        <div id="transactions-list">
+            <p class="text-gray-500 text-sm">Loading...</p>
+        </div>
+
+        <!-- Result count -->
+        <p id="result-count" class="text-xs text-gray-600 mt-3 hidden"></p>
+
+        <!-- Load more / load all -->
+        <div class="flex gap-3 mt-3">
+            <button id="btn-load-more" onclick="loadMore()"
+                class="hidden text-xs text-gray-500 hover:text-blue-400 transition-colors">
+                Load more
+            </button>
+            <button id="btn-load-all" onclick="loadAll()"
+                class="hidden text-xs text-gray-500 hover:text-blue-400 transition-colors">
+                Load all
+            </button>
+        </div>
+
+    </div>
+
+</div>
+
+<!-- Void confirmation modal -->
+<div id="void-modal-backdrop"
+    class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 hidden">
+    <div class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-sm mx-4 space-y-4">
+        <h2 class="text-base font-medium" id="void-modal-title">Void transaction?</h2>
+        <p class="text-sm text-gray-400" id="void-modal-desc"></p>
+        <div>
+            <label class="block text-xs text-gray-400 mb-1">Reason <span class="text-gray-600">(optional)</span></label>
+            <input id="void-reason-input" type="text" placeholder="e.g. Entered in error"
+                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+        </div>
+        <div id="void-modal-error" class="text-red-400 text-sm hidden"></div>
+        <div class="flex gap-3 justify-end">
+            <button onclick="closeVoidModal()"
+                class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-lg px-4 py-2 transition-colors">
+                Cancel
+            </button>
+            <button id="void-modal-confirm-btn"
+                class="bg-red-700 hover:bg-red-600 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors">
+                Void
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let direction = "in";
+    let payeeDefaults = {};
+    let accountsList = [];
+    let categoriesList = [];
+    let allTransactions = [];
+    let filtersOpen = false;
+    let showVoided = false;
+    let currentOffset = 0;
+    const PAGE_SIZE = 100;
+
+    function setDirection(d) {
+        direction = d;
+        const btnIn  = document.getElementById("btn-in");
+        const btnOut = document.getElementById("btn-out");
+        if (d === "in") {
+            btnIn.className  = "px-4 text-sm font-medium transition-colors bg-emerald-600 text-white";
+            btnOut.className = "px-4 text-sm font-medium transition-colors bg-gray-800 text-gray-400";
+        } else {
+            btnOut.className = "px-4 text-sm font-medium transition-colors bg-red-600 text-white";
+            btnIn.className  = "px-4 text-sm font-medium transition-colors bg-gray-800 text-gray-400";
+        }
+    }
+
+    function toggleFilters() {
+        filtersOpen = !filtersOpen;
+        const panel = document.getElementById("filter-panel");
+        const btn   = document.getElementById("filter-btn");
+        if (filtersOpen) {
+            panel.classList.remove("hidden");
+            btn.classList.add("text-blue-400");
+            btn.classList.remove("text-gray-400");
+        } else {
+            panel.classList.add("hidden");
+            btn.classList.remove("text-blue-400");
+            btn.classList.add("text-gray-400");
+        }
+    }
+
+    function clearFilters() {
+        document.getElementById("f-date-from").value  = "";
+        document.getElementById("f-date-to").value    = "";
+        document.getElementById("f-direction").value  = "";
+        document.getElementById("f-account").value    = "";
+        document.getElementById("f-category").value   = "";
+        document.getElementById("f-payee").value      = "";
+        document.getElementById("f-amount-min").value = "";
+        document.getElementById("f-amount-max").value = "";
+        document.getElementById("f-notes").value      = "";
+        applyFilters();
+    }
+
+    function applyFilters() {
+        const dateFrom  = document.getElementById("f-date-from").value;
+        const dateTo    = document.getElementById("f-date-to").value;
+        const dir       = document.getElementById("f-direction").value;
+        const accountId = document.getElementById("f-account").value;
+        const catId     = document.getElementById("f-category").value;
+        const amtMin    = parseFloat(document.getElementById("f-amount-min").value) || null;
+        const amtMax    = parseFloat(document.getElementById("f-amount-max").value) || null;
+        const payeeId   = document.getElementById("f-payee").value;
+        const notes     = document.getElementById("f-notes").value.trim().toLowerCase();
+
+        const filtered = allTransactions.filter(t => {
+            if (dateFrom && t.date < dateFrom) return false;
+            if (dateTo   && t.date > dateTo)   return false;
+            if (dir === "in"  && t.amount_pence < 0) return false;
+            if (dir === "out" && t.amount_pence > 0) return false;
+            if (accountId && String(t.account_id) !== accountId) return false;
+            if (catId && String(t.category_id) !== catId) return false;
+            if (payeeId && String(t.payee_id) !== payeeId) return false;
+
+            const absAmount = Math.abs(t.amount_pence) / 100;
+            if (amtMin !== null && absAmount < amtMin) return false;
+            if (amtMax !== null && absAmount > amtMax) return false;
+
+            if (notes && !(t.notes || "").toLowerCase().includes(notes)) return false;
+
+            return true;
+        });
+
+        // Count active filters for the badge
+        const activeFilters = [dateFrom, dateTo, dir, accountId, catId, payeeId,
+            document.getElementById("f-amount-min").value,
+            document.getElementById("f-amount-max").value,
+            notes].filter(Boolean).length;
+
+        const badge = document.getElementById("filter-count");
+        if (activeFilters > 0) {
+            badge.textContent = `${activeFilters} active`;
+            badge.classList.remove("hidden");
+        } else {
+            badge.classList.add("hidden");
+        }
+
+        renderTransactions(filtered);
+    }
+
+    function renderTransactions(transactions) {
+        const container   = document.getElementById("transactions-list");
+        const countEl     = document.getElementById("result-count");
+
+        if (transactions.length === 0) {
+            container.innerHTML = '<p class="text-gray-500 text-sm">No transactions match your filters.</p>';
+            countEl.classList.add("hidden");
+            return;
+        }
+
+        countEl.textContent = `Showing ${transactions.length} transaction${transactions.length !== 1 ? "s" : ""}`;
+        countEl.classList.remove("hidden");
+
+        container.innerHTML = transactions.map(t => {
+            const { text, colourClass } = formatPenceSigned(t.amount_pence);
+            const isIn    = t.amount_pence >= 0;
+            const dir     = isIn ? "in" : "out";
+            const absAmount = (Math.abs(t.amount_pence) / 100).toFixed(2);
+
+            // Build the arrow-format title
+            // Leaf category only (category_name from API is already just the leaf)
+            const payeeOrNote = t.payee_name || t.notes || "";
+            const catLeaf     = t.category_name || "";
+            let title = "";
+            if (isIn) {
+                const left = [payeeOrNote, catLeaf].filter(Boolean).join(" · ");
+                title = left ? `${left} → ${t.account_name}` : t.account_name;
+            } else {
+                const right = [payeeOrNote, catLeaf].filter(Boolean).join(" · ");
+                title = right ? `${t.account_name} → ${right}` : t.account_name;
+            }
+
+            // Row 2: transaction date + notes (if notes was used as payee fallback, don't repeat)
+            const notesDetail = (t.notes && t.payee_name) ? ` · ${t.notes}` : "";
+            const row2 = `<span class="text-xs text-gray-600 flex-shrink-0">${formatTimestamp(t.created_at || t.date)}</span> ${notesDetail}`;
+
+            const balanceHtml = (!t.is_void && t.balance_after_pence != null)
+                ? `<p class="text-xs font-mono text-gray-600 text-right mt-0.5">Balance: ${formatPence(t.balance_after_pence)}</p>`
+                : "";
+
+            // Voided row styling
+            const isVoided = t.is_void === 1 || t.is_void === true;
+            const rowOpacity = isVoided ? "opacity-40" : "";
+            const voidedBadge = isVoided
+                ? `<span class="text-xs bg-red-900 text-red-400 px-2 py-0.5 rounded-full ml-2">Voided</span>`
+                : "";
+            const actionButtons = isVoided
+                ? `<button onclick="unvoidTransaction(${t.id})"
+                        class="text-xs text-gray-500 hover:text-emerald-400 transition-colors flex-shrink-0">Un-void</button>`
+                : `<button onclick="showCorrect(${t.id})"
+                        class="text-xs text-gray-500 hover:text-blue-400 transition-colors flex-shrink-0">Correct</button>
+                    <button onclick="voidTransaction(${t.id})"
+                        class="text-xs text-gray-500 hover:text-red-400 transition-colors flex-shrink-0">Void</button>`;
+
+            return `
+            <div class="border-b border-gray-800 last:border-0 ${rowOpacity}" id="tx-row-${t.id}">
+                <div class="flex justify-between items-start py-3" id="tx-display-${t.id}">
+                    <div class="min-w-0 mr-4">
+                        <p class="font-medium text-gray-100">${title}${voidedBadge}</p>
+                        <p class="text-xs text-gray-600 mt-0.5">${row2}</p>
+                    </div>
+                    <div class="ml-4 flex-shrink-0">
+                        <div class="flex items-center justify-end gap-3">
+                            <p class="font-mono font-medium ${colourClass}">${text}</p>
+                            ${actionButtons}
+                        </div>
+                        ${balanceHtml}
+                    </div>
+                </div>
+
+                <div class="hidden pb-4 space-y-3 bg-gray-800 rounded-lg p-4 mb-2" id="tx-correct-${t.id}">
+                    <p class="text-xs text-amber-400 font-medium">Correcting transaction — original will be voided</p>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Account</label>
+                        <select id="correct-account-${t.id}"
+                            class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                            ${buildAccountOptions(t.account_id)}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Date</label>
+                        <input id="correct-date-${t.id}" type="date" value="${t.date}"
+                            class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Amount (£)</label>
+                        <div class="flex gap-2">
+                            <div class="flex rounded-lg overflow-hidden border border-gray-600 flex-shrink-0 h-9">
+                                <button id="correct-btn-in-${t.id}" onclick="setCorrectDirection(${t.id}, 'in')"
+                                    class="px-3 text-xs font-medium transition-colors ${dir === 'in' ? 'bg-emerald-600 text-white' : 'bg-gray-700 text-gray-400'}">In</button>
+                                <button id="correct-btn-out-${t.id}" onclick="setCorrectDirection(${t.id}, 'out')"
+                                    class="px-3 text-xs font-medium transition-colors ${dir === 'out' ? 'bg-red-600 text-white' : 'bg-gray-700 text-gray-400'}">Out</button>
+                            </div>
+                            <input id="correct-amount-${t.id}" type="number" step="0.01" min="0" value="${absAmount}"
+                                class="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Payee</label>
+                        <select id="correct-payee-${t.id}"
+                            class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                            ${buildPayeeOptions(t.payee_id)} 
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Category</label>
+                        <select id="correct-category-${t.id}"
+                            class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                            ${buildCategoryOptions(t.category_id)}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Notes</label>
+                        <input id="correct-notes-${t.id}" type="text" value="${t.notes || ''}"
+                            class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div id="correct-error-${t.id}" class="text-red-400 text-xs hidden"></div>
+                    <div class="flex gap-2">
+                        <button onclick="saveCorrection(${t.id})"
+                            class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg px-4 py-1.5 transition-colors">Save Correction</button>
+                        <button onclick="cancelCorrect(${t.id})"
+                            class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-lg px-4 py-1.5 transition-colors">Cancel</button>
+                    </div>
+                </div>
+            </div>
+            `;
+        }).join("");
+
+        window._correctDirections = window._correctDirections || {};
+        transactions.forEach(t => {
+            window._correctDirections[t.id] = t.amount_pence >= 0 ? "in" : "out";
+        });
+    }
+
+    function buildAccountOptions(selectedId) {
+        return accountsList.map(a =>
+            `<option value="${a.id}" ${a.id == selectedId ? 'selected' : ''}>${a.name}</option>`
+        ).join("");
+    }
+
+    function buildPayeeOptions(selectedId) {
+    let html = '<option value="">— No payee —</option>';
+    
+    if (window.payeesList) {
+        html += window.payeesList.map(p => 
+            `<option value="${p.id}" ${p.id == selectedId ? 'selected' : ''}>${p.name}</option>`
+        ).join("");
+    }
+    
+    return html;
+    }
+
+    function buildCategoryOptions(selectedId) {
+        const parents = categoriesList.filter(c => !c.parent_id);
+        const childrenMap = {};
+        categoriesList.filter(c => c.parent_id).forEach(c => {
+            if (!childrenMap[c.parent_id]) childrenMap[c.parent_id] = [];
+            childrenMap[c.parent_id].push(c);
+        });
+        let html = '<option value="">— Uncategorised —</option>';
+        parents.forEach(parent => {
+            const kids = childrenMap[parent.id] || [];
+            if (kids.length === 0) {
+                html += `<option value="${parent.id}" ${parent.id == selectedId ? 'selected' : ''}>${parent.name}</option>`;
+            } else {
+                html += `<optgroup label="${parent.name}">`;
+                kids.forEach(child => {
+                    html += `<option value="${child.id}" ${child.id == selectedId ? 'selected' : ''}>${child.name}</option>`;
+                });
+                html += `</optgroup>`;
+            }
+        });
+        return html;
+    }
+
+    function showCorrect(id) {
+        document.getElementById(`tx-display-${id}`).classList.add("hidden");
+        document.getElementById(`tx-correct-${id}`).classList.remove("hidden");
+    }
+
+    function cancelCorrect(id) {
+        document.getElementById(`tx-display-${id}`).classList.remove("hidden");
+        document.getElementById(`tx-correct-${id}`).classList.add("hidden");
+        const errEl = document.getElementById(`correct-error-${id}`);
+        if (errEl) errEl.classList.add("hidden");
+    }
+
+    function setCorrectDirection(id, d) {
+        window._correctDirections[id] = d;
+        const btnIn  = document.getElementById(`correct-btn-in-${id}`);
+        const btnOut = document.getElementById(`correct-btn-out-${id}`);
+        if (d === "in") {
+            btnIn.className  = "px-3 text-xs font-medium transition-colors bg-emerald-600 text-white";
+            btnOut.className = "px-3 text-xs font-medium transition-colors bg-gray-700 text-gray-400";
+        } else {
+            btnOut.className = "px-3 text-xs font-medium transition-colors bg-red-600 text-white";
+            btnIn.className  = "px-3 text-xs font-medium transition-colors bg-gray-700 text-gray-400";
+        }
+    }
+
+    async function saveCorrection(id) {
+        const payload = {
+            account_id:  document.getElementById(`correct-account-${id}`).value,
+            date:        document.getElementById(`correct-date-${id}`).value,
+            amount:      document.getElementById(`correct-amount-${id}`).value,
+            direction:   window._correctDirections[id],
+            category_id: document.getElementById(`correct-category-${id}`).value || null,
+            notes:       document.getElementById(`correct-notes-${id}`).value,
+            payee_id:    document.getElementById('correct-payee-' + id).value
+        };
+        const response = await fetch(`/api/transactions/${id}/correct`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        if (response.ok) {
+            await loadTransactions();
+        } else {
+            const result = await response.json();
+            const errEl = document.getElementById(`correct-error-${id}`);
+            if (errEl) {
+                errEl.textContent = result.error || "Failed to save correction.";
+                errEl.classList.remove("hidden");
+            }
+        }
+    }
+
+    // --- Void modal helpers ---
+    function openVoidModal(title, desc, onConfirm) {
+        document.getElementById("void-modal-title").textContent = title;
+        document.getElementById("void-modal-desc").textContent  = desc;
+        document.getElementById("void-reason-input").value      = "";
+        document.getElementById("void-modal-error").classList.add("hidden");
+        document.getElementById("void-modal-confirm-btn").onclick = onConfirm;
+        document.getElementById("void-modal-backdrop").classList.remove("hidden");
+        setTimeout(() => document.getElementById("void-reason-input").focus(), 50);
+    }
+
+    function closeVoidModal() {
+        document.getElementById("void-modal-backdrop").classList.add("hidden");
+    }
+
+    document.addEventListener("keydown", e => {
+        if (e.key === "Escape") closeVoidModal();
+    });
+
+    async function voidTransaction(id) {
+        openVoidModal(
+            "Void transaction?",
+            "It will be removed from all views but kept in the database.",
+            async () => {
+                const reason = document.getElementById("void-reason-input").value.trim();
+                const response = await fetch(`/api/transactions/${id}/void`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ void_reason: reason })
+                });
+                if (response.ok) {
+                    closeVoidModal();
+                    await loadAccounts();
+                    await loadTransactions();
+                } else {
+                    const errEl = document.getElementById("void-modal-error");
+                    errEl.textContent = "Failed to void transaction.";
+                    errEl.classList.remove("hidden");
+                }
+            }
+        );
+    }
+
+    async function unvoidTransaction(id) {
+    if (!confirm("Un-void this transaction? It will be restored and appear in all views.")) return;
+    
+    const response = await fetch(`/api/transactions/${id}/unvoid`, { method: "POST" });
+    
+    if (response.ok) {
+        // ✅ The logic below updates your local accountsList so the UI stays in sync
+        const t = allTransactions.find(tx => tx.id === id); // Use allTransactions, not 'transactions'
+        if (t) {
+            const acc = accountsList.find(a => a.id == t.account_id);
+            if (acc) {
+                // Adjusting balance: if we un-void an 'In' (+), balance goes up. 
+                acc.current_balance_pence += t.amount_pence;
+            }
+        }
+        await loadAccounts();
+        await loadTransactions();
+    } else {
+        const data = await response.json();
+        alert(data.error || "Failed to un-void transaction.");
+    }
+    }
+
+    function onPayeeChange() {
+        const payeeId = document.getElementById("payee_id").value;
+        if (payeeId && payeeDefaults[payeeId]) {
+            document.getElementById("category_id").value = payeeDefaults[payeeId];
+        }
+    }
+
+    async function loadAccounts() {
+        const response = await fetch("/api/accounts");
+        accountsList = await response.json();
+
+        const select  = document.getElementById("account_id");
+        const fSelect = document.getElementById("f-account");
+
+        // Preserve current selections so a reload mid-session doesn't reset them
+        const prevSelected  = select.value;
+        const prevFSelected = fSelect.value;
+
+        // Clear before rebuilding — prevents duplicate options accumulating
+        // across the multiple times this function is called per session
+        select.innerHTML  = '<option value="">— Select account —</option>';
+        fSelect.innerHTML = '<option value="">All accounts</option>';
+
+        accountsList.forEach(a => {
+            const opt = document.createElement("option");
+            opt.value = a.id;
+            opt.textContent = a.name;
+            select.appendChild(opt);
+
+            const fOpt = document.createElement("option");
+            fOpt.value = a.id;
+            fOpt.textContent = a.name;
+            fSelect.appendChild(fOpt);
+        });
+
+        // Restore selections
+        if (prevSelected)  select.value  = prevSelected;
+        if (prevFSelected) fSelect.value = prevFSelected;
+    }
+
+    async function loadPayees() {
+        const response = await fetch("/api/payees");
+        const payees = await response.json();
+
+        window.payeesList = payees;
+
+        const select  = document.getElementById("payee_id");
+        const fSelect = document.getElementById("f-payee");
+        payees.forEach(p => {
+            if (p.default_category_id) payeeDefaults[p.id] = p.default_category_id;
+
+            const option = document.createElement("option");
+            option.value = p.id;
+            option.textContent = p.name;
+            select.appendChild(option);
+
+            const fOpt = document.createElement("option");
+            fOpt.value = p.id;
+            fOpt.textContent = p.name;
+            fSelect.appendChild(fOpt);
+        });
+    }
+
+    async function loadCategories() {
+        const response = await fetch("/api/categories");
+        categoriesList = await response.json();
+
+        // Populate add form category dropdown
+        document.getElementById("category_id").innerHTML = buildCategoryOptions(null);
+
+        // Populate filter category dropdown (flat list for simplicity)
+        const fSelect = document.getElementById("f-category");
+        const parents = categoriesList.filter(c => !c.parent_id);
+        const childrenMap = {};
+        categoriesList.filter(c => c.parent_id).forEach(c => {
+            if (!childrenMap[c.parent_id]) childrenMap[c.parent_id] = [];
+            childrenMap[c.parent_id].push(c);
+        });
+        parents.forEach(parent => {
+            const kids = childrenMap[parent.id] || [];
+            if (kids.length === 0) {
+                const opt = document.createElement("option");
+                opt.value = parent.id;
+                opt.textContent = parent.name;
+                fSelect.appendChild(opt);
+            } else {
+                const group = document.createElement("optgroup");
+                group.label = parent.name;
+                kids.forEach(child => {
+                    const opt = document.createElement("option");
+                    opt.value = child.id;
+                    opt.textContent = child.name;
+                    group.appendChild(opt);
+                });
+                fSelect.appendChild(group);
+            }
+        });
+    }
+
+    function toggleVoided() {
+        showVoided = !showVoided;
+        const btn = document.getElementById("voided-btn");
+        btn.classList.toggle("text-amber-400", showVoided);
+        btn.classList.toggle("text-gray-400", !showVoided);
+        loadTransactions();
+    }
+
+    async function loadTransactions() {
+        currentOffset = 0;
+        const voidedParam = showVoided ? "&include_voided=1" : "";
+        const response = await fetch(`/api/transactions?limit=${PAGE_SIZE}&offset=0${voidedParam}`);
+        allTransactions = await response.json();
+        applyFilters();
+        updateLoadButtons();
+    }
+
+    async function loadMore() {
+        currentOffset += PAGE_SIZE;
+        const voidedParam = showVoided ? "&include_voided=1" : "";
+        const response = await fetch(`/api/transactions?limit=${PAGE_SIZE}&offset=${currentOffset}${voidedParam}`);
+        const more = await response.json();
+        allTransactions = allTransactions.concat(more);
+        applyFilters();
+        updateLoadButtons(more.length);
+    }
+
+    const LOAD_ALL_WARN_THRESHOLD = 500;
+
+    async function loadAll() {
+        const voidedParam = showVoided ? "&include_voided=1" : "";
+
+        // Check the total count before loading everything — warn if it's large
+        // enough to cause noticeable slowness in the browser.
+        const countRes  = await fetch(`/api/transactions/count${showVoided ? "?include_voided=1" : ""}`);
+        const countData = await countRes.json();
+        const total     = countData.count;
+
+        if (total > LOAD_ALL_WARN_THRESHOLD) {
+            const proceed = confirm(
+                `This will load all ${total.toLocaleString()} transactions into the page at once.
+
+` +
+                `This may be slow. Continue?`
+            );
+            if (!proceed) return;
+        }
+
+        const response = await fetch(`/api/transactions?limit=0${voidedParam}`);
+        allTransactions = await response.json();
+        currentOffset = allTransactions.length;
+        applyFilters();
+        updateLoadButtons(0);
+    }
+
+    function updateLoadButtons(lastBatchSize) {
+        const btnMore = document.getElementById("btn-load-more");
+        const btnAll  = document.getElementById("btn-load-all");
+        if (!btnMore || !btnAll) return;
+        // Hide both if last batch was less than PAGE_SIZE (we've reached the end)
+        const moreAvailable = lastBatchSize === undefined
+            ? allTransactions.length === PAGE_SIZE
+            : lastBatchSize === PAGE_SIZE;
+        btnMore.classList.toggle("hidden", !moreAvailable);
+        btnAll.classList.toggle("hidden",  !moreAvailable);
+    }
+
+    async function addTransaction() {
+        const errorBox = document.getElementById("error-message");
+        errorBox.classList.add("hidden");
+
+        const payload = {
+            account_id:  document.getElementById("account_id").value,
+            date:        document.getElementById("date").value,
+            amount:      document.getElementById("amount").value,
+            direction:   direction,
+            payee_id:    document.getElementById("payee_id").value || null,
+            category_id: document.getElementById("category_id").value || null,
+            notes:       document.getElementById("notes").value
+        };
+
+        const response = await fetch("/api/transactions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        const acc = accountsList.find(a => a.id == payload.account_id);
+        if (acc) {
+            const amountPence = Math.round(parseFloat(payload.amount) * 100);
+            const signedAmount = payload.direction === "out" ? -amountPence : amountPence;
+            acc.current_balance_pence += signedAmount;
+        }
+
+        if (!response.ok) {
+            errorBox.textContent = result.error;
+            errorBox.classList.remove("hidden");
+            return;
+        }
+
+        document.getElementById("amount").value      = "";
+        document.getElementById("notes").value       = "";
+        document.getElementById("category_id").value = "";
+        document.getElementById("payee_id").value    = "";
+        document.getElementById("amount-preview").classList.add("hidden");
+        await loadAccounts();
+        await loadTransactions();
+    }
+
+    const today = new Date().toISOString().split("T")[0];
+    document.getElementById("date").value = today;
+
+    // Amount formatted preview (existing behaviour — shows e.g. "£10.00")
+    // We handle this manually here rather than via attachAmountPreview so we
+    // can also update the new-balance preview on the same event.
+    function updateAmountPreviews() {
+        const raw        = document.getElementById("amount").value;
+        const accountId  = document.getElementById("account_id").value;
+        const previewEl  = document.getElementById("amount-preview");
+        const balanceEl  = document.getElementById("new-balance-preview");
+
+        const num = parseFloat(raw);
+        if (!isNaN(num) && raw !== "" && num > 0) {
+            previewEl.textContent = formatInputPreview(raw);
+        } else {
+            previewEl.textContent = "";
+        }
+
+        // New balance preview — only shown when an account is selected and
+        // the amount is a valid positive number
+        const account = accountsList.find(a => a.id == accountId);
+        if (account && !isNaN(num) && raw !== "" && num > 0) {
+            const amountPence   = Math.round(num * 100);
+            const signedPence   = direction === "out" ? -amountPence : amountPence;
+            const newBalPence   = account.current_balance_pence + signedPence;
+            const { text, colourClass } = formatPenceSigned(newBalPence);
+            balanceEl.innerHTML = `New balance: <span class="${colourClass} font-mono">${formatPence(newBalPence)}</span>`;
+        } else {
+            balanceEl.textContent = "";
+        }
+    }
+
+    document.getElementById("amount").addEventListener("input", updateAmountPreviews);
+    // Also re-run when the account or direction changes so the preview stays accurate
+    document.getElementById("account_id").addEventListener("change", updateAmountPreviews);
+    // setDirection() already handles the button UI — hook into it to refresh the preview too
+    const _origSetDirection = setDirection;
+    setDirection = function(d) { _origSetDirection(d); updateAmountPreviews(); };
+
+    // Clear new-balance preview on form reset after save
+    const _origAddTransaction = addTransaction;
+    addTransaction = async function() {
+        await _origAddTransaction();
+        document.getElementById("new-balance-preview").textContent = "";
+        document.getElementById("amount-preview").textContent = "";
+    };
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const presetAccountId = urlParams.get("account_id");
+
+    async function init() {
+        // Load accounts first so balances are available when transactions render
+        await loadAccounts();
+        await Promise.all([loadPayees(), loadCategories()]);
+        await loadTransactions();
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const presetId  = urlParams.get("account_id");
+        if (presetId) {
+            const select = document.getElementById("account_id");
+            select.value = presetId;
+        }
+    }
+
+    init();
+</script>
+{% endblock %}

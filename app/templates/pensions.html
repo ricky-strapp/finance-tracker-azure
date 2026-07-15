@@ -1,0 +1,774 @@
+{% extends "layout.html" %}
+{% block title %}Pensions — Finance Tracker{% endblock %}
+
+{% block content %}
+<div class="p-8">
+
+    <!-- Page header -->
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-semibold">Pensions</h1>
+        <button onclick="openAddModal()"
+            class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors">
+            + Add Pension
+        </button>
+    </div>
+
+    <!-- Summary cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+            <p class="text-xs text-gray-500 uppercase tracking-wide mb-1">Total pension pot value</p>
+            <p id="summary-pot" class="text-3xl font-mono font-semibold text-emerald-400">--</p>
+            <p class="text-xs text-gray-600 mt-1">Workplace, LISA and SIPP combined</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+            <p class="text-xs text-gray-500 uppercase tracking-wide mb-1">Confirmed retirement income</p>
+            <p id="summary-annual" class="text-3xl font-mono font-semibold text-blue-400">--</p>
+            <p class="text-xs text-gray-600 mt-1">per year (LGPS and state pension)</p>
+        </div>
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+            <p class="text-xs text-gray-500 uppercase tracking-wide mb-1">Confirmed retirement income</p>
+            <p id="summary-monthly" class="text-3xl font-mono font-semibold text-blue-400">--</p>
+            <p class="text-xs text-gray-600 mt-1">per month</p>
+        </div>
+    </div>
+
+    <!-- Pensions section header -->
+    <div class="flex items-center gap-3 mb-4">
+        <h2 class="text-lg font-medium">Pensions</h2>
+        <button onclick="openGlobalModal('pot')"
+            class="bg-emerald-900 hover:bg-emerald-800 text-emerald-300 text-sm font-medium rounded-lg px-3 py-1.5 transition-colors">
+            + Update Pot
+        </button>
+        <button onclick="openGlobalModal('income')"
+            class="bg-blue-900 hover:bg-blue-800 text-blue-300 text-sm font-medium rounded-lg px-3 py-1.5 transition-colors">
+            + Update Entitlement
+        </button>
+        <div class="ml-auto">
+            <button onclick="openVoidModal()"
+                class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-medium rounded-lg px-3 py-1.5 transition-colors border border-gray-700">
+                Edit / Void Entry
+            </button>
+        </div>
+    </div>
+
+    <!-- All pension cards -->
+    <div id="pension-cards" class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-8"></div>
+    <p id="cards-empty" class="hidden text-sm text-gray-500 mb-8">No pensions added yet. Click Add Pension to get started.</p>
+
+    <!-- Recent Activity -->
+    <div class="bg-gray-900 rounded-xl p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-medium">Recent Activity</h2>
+            <a href="/reports/pension-value" class="text-sm text-blue-400 hover:text-blue-300">View pension history →</a>
+        </div>
+        <div id="pension-activity" class="overflow-y-auto pr-1" style="max-height: 400px;">
+            <p class="text-gray-500 text-sm">Loading...</p>
+        </div>
+    </div>
+
+
+
+</div>
+
+<!-- Update modal -->
+<div id="update-modal-backdrop"
+    class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 hidden"
+    onclick="handleUpdateBackdrop(event)">
+    <div class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-md mx-4 space-y-4">
+        <div class="flex items-center justify-between">
+            <h2 class="text-lg font-medium" id="update-modal-title">Update</h2>
+            <button onclick="closeUpdateModal()" class="text-gray-500 hover:text-gray-300">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div id="update-account-row" class="hidden">
+            <label class="block text-sm text-gray-400 mb-1">Pension</label>
+            <select id="update-account" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500"></select>
+        </div>
+        <div>
+            <label class="block text-sm text-gray-400 mb-1">Date</label>
+            <input id="update-date" type="date" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+        </div>
+        <div id="update-value-row">
+            <label class="block text-sm text-gray-400 mb-1">Current pot value (£)</label>
+            <input id="update-value" type="number" step="0.01" min="0" placeholder="0.00" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+            <p id="update-value-preview" class="text-sm text-gray-500 mt-1 hidden"></p>
+        </div>
+        <div id="update-annual-row" class="hidden">
+            <label class="block text-sm text-gray-400 mb-1">Annual entitlement at retirement (£/year)</label>
+            <input id="update-annual" type="number" step="0.01" min="0" placeholder="0.00" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+            <p id="update-annual-preview" class="text-sm text-gray-500 mt-1 hidden"></p>
+        </div>
+        <div>
+            <label class="block text-sm text-gray-400 mb-1">Notes (optional)</label>
+            <input id="update-notes" type="text" placeholder="e.g. Annual statement April 2025" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+        </div>
+        <div id="update-error" class="text-red-400 text-sm hidden"></div>
+        <div class="flex gap-3 justify-end">
+            <button onclick="closeUpdateModal()" class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-lg px-5 py-2 transition-colors">Cancel</button>
+            <button onclick="saveEntry()" class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg px-5 py-2 transition-colors">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- Add Pension modal -->
+<div id="add-modal-backdrop"
+    class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 hidden"
+    onclick="handleAddBackdrop(event)">
+    <div class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-md mx-4 space-y-4">
+        <div class="flex items-center justify-between">
+            <h2 class="text-lg font-medium">Add Pension</h2>
+            <button onclick="closeAddModal()" class="text-gray-500 hover:text-gray-300">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div>
+            <label class="block text-sm text-gray-400 mb-1">Type</label>
+            <select id="add-subtype" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+                <option value="">-- Select type --</option>
+                <optgroup label="Pension Pot">
+                    <option value="workplace">Workplace Pension</option>
+                    <option value="lisa">LISA</option>
+                    <option value="sipp">SIPP</option>
+                </optgroup>
+                <optgroup label="Income Entitlement">
+                    <option value="lgps">LGPS</option>
+                    <option value="state_pension">State Pension</option>
+                </optgroup>
+            </select>
+        </div>
+        <div>
+            <label class="block text-sm text-gray-400 mb-1">Name</label>
+            <input id="add-name" type="text" placeholder="e.g. NHS Pension 2018-2022" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+        </div>
+        <div>
+            <label class="block text-sm text-gray-400 mb-1">Provider (optional)</label>
+            <input id="add-provider" type="text" placeholder="e.g. Nest, Aviva" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+        </div>
+        <div>
+            <label class="block text-sm text-gray-400 mb-1">Notes (optional)</label>
+            <input id="add-notes" type="text" placeholder="e.g. scheme reference" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+        </div>
+        <div id="add-error" class="text-red-400 text-sm hidden"></div>
+        <div class="flex gap-3 justify-end">
+            <button onclick="closeAddModal()" class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-lg px-5 py-2 transition-colors">Cancel</button>
+            <button onclick="addPension()" class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg px-5 py-2 transition-colors">Add Pension</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit / Void Entry modal -->
+<div id="void-modal-backdrop"
+    class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 hidden"
+    onclick="handleVoidBackdrop(event)">
+    <div class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-lg mx-4 space-y-4">
+        <div class="flex items-center justify-between">
+            <h2 class="text-lg font-medium">Edit / Void Entry</h2>
+            <button onclick="closeVoidModal()" class="text-gray-500 hover:text-gray-300">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+
+        <!-- Step 1: pick pension -->
+        <div>
+            <label class="block text-sm text-gray-400 mb-1">Pension</label>
+            <select id="void-account" onchange="loadVoidEntries()"
+                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+                <option value="">— Select pension —</option>
+            </select>
+        </div>
+
+        <!-- Step 2: entries list — shown once a pension is selected -->
+        <div id="void-entries-wrap" class="hidden">
+            <label class="block text-sm text-gray-400 mb-2">Historical entries</label>
+            <div id="void-entries-list" class="space-y-1 max-h-64 overflow-y-auto pr-1"></div>
+        </div>
+
+        <!-- Step 3: edit form — shown when an entry is selected -->
+        <div id="void-edit-wrap" class="hidden space-y-3 border-t border-gray-700 pt-4">
+            <p class="text-sm text-gray-400">Editing entry — <span id="void-edit-label" class="text-gray-200"></span></p>
+            <div id="void-edit-value-row">
+                <label class="block text-xs text-gray-400 mb-1">Value (£)</label>
+                <input id="void-edit-value" type="number" step="0.01" min="0"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+            </div>
+            <div id="void-edit-annual-row" class="hidden">
+                <label class="block text-xs text-gray-400 mb-1">Annual entitlement (£/year)</label>
+                <input id="void-edit-annual" type="number" step="0.01" min="0"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-400 mb-1">Date</label>
+                <input id="void-edit-date" type="date"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-400 mb-1">Notes (optional)</label>
+                <input id="void-edit-notes" type="text"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+            </div>
+            <div id="void-edit-error" class="text-red-400 text-sm hidden"></div>
+            <div class="flex gap-2 justify-between">
+                <button onclick="voidSelectedEntry()"
+                    class="bg-red-900 hover:bg-red-800 text-red-300 text-sm font-medium rounded-lg px-4 py-1.5 transition-colors">
+                    Void Entry
+                </button>
+                <div class="flex gap-2">
+                    <button onclick="cancelVoidEdit()"
+                        class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-lg px-4 py-1.5 transition-colors">
+                        Cancel
+                    </button>
+                    <button onclick="saveVoidEdit()"
+                        class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg px-4 py-1.5 transition-colors">
+                        Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex justify-end pt-2">
+            <button onclick="closeVoidModal()"
+                class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-lg px-5 py-2 transition-colors">
+                Close
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Pension modal -->
+<div id="edit-modal-backdrop"
+    class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 hidden"
+    onclick="handleEditBackdrop(event)">
+    <div class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-md mx-4 space-y-4">
+        <div class="flex items-center justify-between">
+            <h2 class="text-lg font-medium">Edit Pension</h2>
+            <button onclick="closeEditModal()" class="text-gray-500 hover:text-gray-300">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div>
+            <label class="block text-sm text-gray-400 mb-1">Name</label>
+            <input id="edit-name" type="text" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+        </div>
+        <div>
+            <label class="block text-sm text-gray-400 mb-1">Provider (optional)</label>
+            <input id="edit-provider" type="text" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+        </div>
+        <div>
+            <label class="block text-sm text-gray-400 mb-1">Notes (optional)</label>
+            <input id="edit-notes" type="text" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+        </div>
+        <div id="edit-error" class="text-red-400 text-sm hidden"></div>
+        <div class="flex gap-3 justify-end">
+            <button onclick="closeEditModal()" class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-lg px-5 py-2 transition-colors">Cancel</button>
+            <button onclick="saveEdit()" class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg px-5 py-2 transition-colors">Save</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const POT_SUBTYPES    = ["workplace", "lisa", "sipp"];
+    const INCOME_SUBTYPES = ["lgps", "state_pension"];
+    const SUBTYPE_LABELS  = { workplace: "Workplace", lisa: "LISA", sipp: "SIPP", lgps: "LGPS", state_pension: "State Pension" };
+
+    let allAccounts   = [];
+    let editingId     = null;
+    let updateAccId   = null;
+    let updateIsPot   = false;
+    let updateIsGlobal = false;
+    let selectedVoidEntryId = null;
+    let voidEntryIsPot      = false;
+    let voidEntriesData = [];
+    let voidEntriesPage = 0;
+    const VOID_PAGE_SIZE = 5;
+
+    // --- Formatting ---
+    function fmt(pence) {
+        return "£" + (Math.abs(pence) / 100).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function fmtPreview(raw) {
+        const n = parseFloat(raw);
+        if (isNaN(n) || raw === "") return "";
+        return "£" + n.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function fmtDate(iso) {
+        if (!iso) return "--";
+        const [y,m,d] = iso.split("-"); return d+"/"+m+"/"+y;
+    }
+
+    // --- Preview wiring ---
+    function attachPreviews() {
+        const vi = document.getElementById("update-value");
+        const vp = document.getElementById("update-value-preview");
+        const ai = document.getElementById("update-annual");
+        const ap = document.getElementById("update-annual-preview");
+        vi.addEventListener("input", () => { const f = fmtPreview(vi.value); vp.textContent = f; vp.classList.toggle("hidden", !f); });
+        ai.addEventListener("input", () => { const f = fmtPreview(ai.value); ap.textContent = f; ap.classList.toggle("hidden", !f); });
+    }
+
+    // --- Update modal ---
+    function openUpdateModal(accountId, isPot, name) {
+        updateAccId    = accountId;
+        updateIsPot    = isPot;
+        updateIsGlobal = false;
+        document.getElementById("update-modal-title").textContent = "Update — " + name;
+        document.getElementById("update-account-row").classList.add("hidden");
+        resetUpdateModal();
+        document.getElementById("update-value-row").classList.toggle("hidden", !isPot);
+        document.getElementById("update-annual-row").classList.toggle("hidden", isPot);
+        document.getElementById("update-modal-backdrop").classList.remove("hidden");
+    }
+        function openGlobalModal(type) {
+        updateIsPot    = (type === "pot");
+        updateIsGlobal = true;
+        updateAccId    = null;
+        document.getElementById("update-modal-title").textContent = updateIsPot ? "Update Pension Pot" : "Update Income Entitlement";
+        const relevant = allAccounts.filter(a => updateIsPot 
+            ? POT_SUBTYPES.includes(a.subtype) 
+            : INCOME_SUBTYPES.includes(a.subtype));
+        const sel = document.getElementById("update-account");
+        sel.innerHTML = '<option value="" disabled selected>-- Select account --</option>';
+        // Add the actual accounts
+        if (relevant.length > 0) {
+            relevant.forEach(a => {
+                const opt = document.createElement("option");
+                opt.value = a.id;
+                opt.textContent = `${a.name} (${SUBTYPE_LABELS[a.subtype] || a.subtype})`;
+                sel.appendChild(opt);
+            });
+        }
+        document.getElementById("update-account-row").classList.remove("hidden");
+        document.getElementById("update-date").value   = new Date().toISOString().split("T")[0];
+        document.getElementById("update-value").value  = "";
+        document.getElementById("update-annual").value = "";
+        document.getElementById("update-notes").value  = "";
+        document.getElementById("update-value-preview").classList.add("hidden");
+        document.getElementById("update-annual-preview").classList.add("hidden");
+        document.getElementById("update-error").classList.add("hidden");
+        document.getElementById("update-value-row").classList.toggle("hidden", !updateIsPot);
+        document.getElementById("update-annual-row").classList.toggle("hidden", updateIsPot);
+        document.getElementById("update-modal-backdrop").classList.remove("hidden");
+    }
+    function resetUpdateModal() {
+        document.getElementById("update-date").value   = new Date().toISOString().split("T")[0];
+        document.getElementById("update-value").value  = "";
+        document.getElementById("update-annual").value = "";
+        document.getElementById("update-notes").value  = "";
+        document.getElementById("update-value-preview").classList.add("hidden");
+        document.getElementById("update-annual-preview").classList.add("hidden");
+        document.getElementById("update-error").classList.add("hidden");
+        const accountSelect = document.getElementById("update-account");
+        if (accountSelect) {
+        accountSelect.innerHTML = '<option value="" disabled selected>-- Select account --</option>';
+        }
+    }
+    function closeUpdateModal() { document.getElementById("update-modal-backdrop").classList.add("hidden"); }
+    function handleUpdateBackdrop(e) { if (e.target === document.getElementById("update-modal-backdrop")) closeUpdateModal(); }
+
+    async function saveEntry() {
+        const errEl = document.getElementById("update-error");
+        errEl.classList.add("hidden");
+        const accountId = updateIsGlobal ? parseInt(document.getElementById("update-account").value) : updateAccId;
+        if (!accountId) { errEl.textContent = "Please select a pension."; errEl.classList.remove("hidden"); return; }
+        const payload = { account_id: accountId, entry_date: document.getElementById("update-date").value, notes: document.getElementById("update-notes").value };
+        if (updateIsPot) payload.value  = document.getElementById("update-value").value;
+        else             payload.annual = document.getElementById("update-annual").value;
+        const res  = await fetch("/api/pension-entries", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        const data = await res.json();
+        if (!res.ok) { errEl.textContent = data.error; errEl.classList.remove("hidden"); return; }
+        closeUpdateModal();
+        load();
+    }
+
+    // --- Add modal ---
+    function openAddModal() {
+        document.getElementById("add-subtype").value  = "";
+        document.getElementById("add-name").value     = "";
+        document.getElementById("add-provider").value = "";
+        document.getElementById("add-notes").value    = "";
+        document.getElementById("add-error").classList.add("hidden");
+        document.getElementById("add-modal-backdrop").classList.remove("hidden");
+    }
+    function closeAddModal() { document.getElementById("add-modal-backdrop").classList.add("hidden"); }
+    function handleAddBackdrop(e) { if (e.target === document.getElementById("add-modal-backdrop")) closeAddModal(); }
+
+    async function addPension() {
+        const errEl  = document.getElementById("add-error");
+        errEl.classList.add("hidden");
+        const payload = { subtype: document.getElementById("add-subtype").value, name: document.getElementById("add-name").value.trim(), provider: document.getElementById("add-provider").value.trim(), notes: document.getElementById("add-notes").value.trim() };
+        if (!payload.subtype || !payload.name) { errEl.textContent = "Type and name are required."; errEl.classList.remove("hidden"); return; }
+        const res  = await fetch("/api/pensions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        const data = await res.json();
+        if (!res.ok) { errEl.textContent = data.error; errEl.classList.remove("hidden"); return; }
+        closeAddModal();
+        load();
+    }
+
+    // --- Edit modal ---
+    function openEditModal(id) {
+        const a = allAccounts.find(a => a.id === id);
+        if (!a) return;
+        editingId = id;
+        document.getElementById("edit-name").value     = a.name;
+        document.getElementById("edit-provider").value = a.provider || "";
+        document.getElementById("edit-notes").value    = a.notes    || "";
+        document.getElementById("edit-error").classList.add("hidden");
+        document.getElementById("edit-modal-backdrop").classList.remove("hidden");
+    }
+    function closeEditModal() { document.getElementById("edit-modal-backdrop").classList.add("hidden"); editingId = null; }
+    function handleEditBackdrop(e) { if (e.target === document.getElementById("edit-modal-backdrop")) closeEditModal(); }
+
+    async function saveEdit() {
+        const errEl = document.getElementById("edit-error");
+        errEl.classList.add("hidden");
+        const payload = { name: document.getElementById("edit-name").value.trim(), provider: document.getElementById("edit-provider").value.trim(), notes: document.getElementById("edit-notes").value.trim() };
+        if (!payload.name) { errEl.textContent = "Name is required."; errEl.classList.remove("hidden"); return; }
+        const res = await fetch("/api/pensions/" + editingId, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        if (res.ok) { closeEditModal(); load(); }
+        else { errEl.textContent = "Failed to save."; errEl.classList.remove("hidden"); }
+    }
+
+    async function deactivatePension(id, name) {
+        if (!confirm('Remove "' + name + '"? It will no longer appear on this page.')) return;
+        const res = await fetch("/api/pensions/" + id + "/deactivate", { method: "POST" });
+        if (res.ok) load();
+    }
+
+    async function movePension(id, direction) {
+        await fetch("/api/pensions/" + id + "/move", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ direction }) });
+        load();
+    }
+
+    // --- Escape key closes any open modal ---
+    document.addEventListener("keydown", e => {
+        if (e.key !== "Escape") return;
+        closeUpdateModal(); closeAddModal(); closeEditModal();
+    });
+
+    // --- Build a single card ---
+    function buildCard(account, idx, total) {
+        const isPot      = account.is_pot;
+        const label      = SUBTYPE_LABELS[account.subtype] || account.subtype;
+        const latest     = account.latest;
+        const isFirst    = idx === 0;
+        const isLast     = idx === total - 1;
+        const safeName   = account.name.replace(/'/g, "\\'");
+
+        const balanceHtml = !latest
+            ? '<p class="text-xl font-mono font-medium text-gray-600">No data yet</p>'
+            : isPot
+                ? '<p class="text-xl font-mono font-medium text-emerald-400">' + fmt(latest.value_pence) + '</p>'
+                : '<p class="text-xl font-mono font-medium text-blue-400">' + fmt(latest.annual_pence) + '<span class="text-xs text-gray-500 ml-1">/yr</span></p>';
+
+        const asOf = latest ? '<p class="text-xs text-gray-600 mt-1">as of ' + fmtDate(latest.entry_date) + '</p>' : '';
+        const providerStr = account.provider ? '<p class="text-xs text-gray-500 mt-0.5">' + account.provider + '</p>' : '';
+
+        return '<div class="bg-gray-900 rounded-xl p-5 border border-gray-800">'
+            + '<div class="flex items-start justify-between mb-1">'
+            +   '<div class="flex-1 min-w-0">'
+            +     '<p class="text-xs text-gray-500 uppercase tracking-wide">' + label + '</p>'
+            +     '<p class="font-medium text-gray-100 mt-0.5 truncate">' + account.name + '</p>'
+            +     providerStr
+            +   '</div>'
+            +   '<div class="flex flex-col gap-0 ml-2 flex-shrink-0">'
+            +     '<button onclick="movePension(' + account.id + ', \'up\')" ' + (isFirst ? 'disabled' : '') + ' class="text-gray-600 hover:text-gray-300 disabled:opacity-20 transition-colors leading-none text-xs px-1">▲</button>'
+            +     '<button onclick="movePension(' + account.id + ', \'down\')" ' + (isLast ? 'disabled' : '') + ' class="text-gray-600 hover:text-gray-300 disabled:opacity-20 transition-colors leading-none text-xs px-1">▼</button>'
+            +   '</div>'
+            + '</div>'
+            + '<div class="mt-3">' + balanceHtml + asOf + '</div>'
+            + '<div class="flex items-center gap-3 mt-3">'
+            +   '<button onclick="openUpdateModal(' + account.id + ', ' + isPot + ', \'' + safeName + '\')" class="text-xs text-gray-500 hover:text-white transition-colors">Update</button>'
+            +   '<button onclick="openEditModal(' + account.id + ')" class="text-xs text-gray-500 hover:text-blue-400 transition-colors">Edit</button>'
+            +   '<button onclick="deactivatePension(' + account.id + ', \'' + safeName + '\')" class="text-xs text-gray-500 hover:text-red-400 transition-colors">Remove</button>'
+            + '</div>'
+            + '</div>';
+    }
+
+    // --- Recent activity (pot valuations only) ---
+    async function loadRecentActivity() {
+        const container = document.getElementById("pension-activity");
+        // Fetch all pot pension accounts with their entries (already in allAccounts)
+        const potAccounts = allAccounts.filter(a => POT_SUBTYPES.includes(a.subtype));
+
+        // Build a flat list of entries with account name and diff from previous
+        const entries = [];
+        for (const account of potAccounts) {
+            if (!account.entries || account.entries.length === 0) continue;
+            // entries are DESC (newest first) — we need to calculate diffs
+            // pair each entry with the one after it (which is older)
+            const sorted = [...account.entries].sort((a, b) => {
+                if (a.entry_date !== b.entry_date) return a.entry_date.localeCompare(b.entry_date);
+                return a.id - b.id;
+            });
+            sorted.forEach((entry, idx) => {
+                const prev = idx > 0 ? sorted[idx - 1].value_pence : null;
+                const diff = prev !== null ? entry.value_pence - prev : entry.value_pence;
+                entries.push({
+                    account_name: account.name,
+                    entry_date:   entry.entry_date,
+                    value_pence:  entry.value_pence,
+                    diff_pence:   diff,
+                    notes:        entry.notes || "",
+                    created_at:   entry.created_at || entry.entry_date
+                });
+            });
+        }
+
+        // Sort newest first
+        entries.sort((a, b) => (b.created_at || b.entry_date).localeCompare(a.created_at || a.entry_date));
+
+        if (entries.length === 0) {
+            container.innerHTML = '<p class="text-gray-500 text-sm">No pot valuations recorded yet.</p>';
+            return;
+        }
+
+        container.innerHTML = entries.map(e => {
+            const isUp = e.diff_pence >= 0;
+            const pillHtml = `<span class="inline-flex items-center rounded-full overflow-hidden text-xs font-medium">
+                <span class="px-2 py-0.5 bg-blue-900 text-blue-300">Valuation</span>
+                <span class="px-2 py-0.5 ${isUp ? "bg-emerald-900 text-emerald-300" : "bg-red-900 text-red-300"}">${isUp ? "Up" : "Down"}</span>
+            </span>`;
+
+            const { text: diffText, colourClass: diffCls } = formatPenceSigned(e.diff_pence);
+            const notesDetail = e.notes ? `<p class="text-sm text-gray-400 mt-0.5">${e.notes}</p>` : "";
+
+            return `
+                <div class="flex justify-between items-start py-3 border-b border-gray-800 last:border-0">
+                    <div class="min-w-0 mr-4">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <div class="flex-shrink-0" style="width:9.5rem">${pillHtml}</div>
+                            <span class="font-medium text-gray-100">${e.account_name}</span>
+                            <span class="text-xs text-gray-600 flex-shrink-0">${formatDate(e.entry_date)}</span>
+                        </div>
+                        ${notesDetail}
+                    </div>
+                    <div class="ml-4 flex-shrink-0 text-right">
+                        <p class="font-mono font-medium ${diffCls}">${diffText}</p>
+                        <p class="text-xs text-gray-600 font-mono mt-0.5">${fmt(e.value_pence)}</p>
+                    </div>
+                </div>`;
+        }).join("");
+    }
+
+    // --- Main load ---
+    async function load() {
+        const sumRes  = await fetch("/api/pensions/summary");
+        const summary = await sumRes.json();
+        document.getElementById("summary-pot").textContent     = fmt(summary.total_pot_pence);
+        document.getElementById("summary-annual").textContent  = fmt(summary.total_annual_pence) + "/yr";
+        document.getElementById("summary-monthly").textContent = fmt(summary.total_monthly_pence) + "/mo";
+
+        const res   = await fetch("/api/pensions");
+        allAccounts = await res.json();
+
+        const cardsEl  = document.getElementById("pension-cards");
+        const emptyEl  = document.getElementById("cards-empty");
+
+        if (allAccounts.length === 0) {
+            cardsEl.innerHTML = "";
+            emptyEl.classList.remove("hidden");
+        } else {
+            emptyEl.classList.add("hidden");
+            cardsEl.innerHTML = allAccounts.map((a, i) => buildCard(a, i, allAccounts.length)).join("");
+        }
+
+        loadRecentActivity();
+    }
+
+    // --- Edit/Void Entry modal ---
+
+    function openVoidModal() {
+        selectedVoidEntryId = null;
+        // Populate pension dropdown
+        const sel = document.getElementById("void-account");
+        sel.innerHTML = '<option value="">— Select pension —</option>';
+        allAccounts.forEach(a => {
+            const opt = document.createElement("option");
+            opt.value = a.id;
+            opt.textContent = `${a.name} (${SUBTYPE_LABELS[a.subtype] || a.subtype})`;
+            sel.appendChild(opt);
+        });
+        document.getElementById("void-entries-wrap").classList.add("hidden");
+        document.getElementById("void-edit-wrap").classList.add("hidden");
+        document.getElementById("void-modal-backdrop").classList.remove("hidden");
+    }
+
+    function closeVoidModal() {
+        document.getElementById("void-modal-backdrop").classList.add("hidden");
+        selectedVoidEntryId = null;
+    }
+
+    function handleVoidBackdrop(e) {
+        if (e.target === document.getElementById("void-modal-backdrop")) closeVoidModal();
+    }
+
+    // Renders the current page of entries in the void modal.
+    // Must be at module scope so nextVoidPage / prevVoidPage can call it.
+    function renderVoidEntriesPage() {
+        const listEl = document.getElementById("void-entries-list");
+
+        const start = voidEntriesPage * VOID_PAGE_SIZE;
+        const end   = start + VOID_PAGE_SIZE;
+        const pageEntries = voidEntriesData.slice(start, end);
+
+        const entriesHtml = pageEntries.map(e => {
+            const val = voidEntryIsPot
+                ? `£${(e.value_pence / 100).toLocaleString("en-GB", {minimumFractionDigits:2})}`
+                : `£${(e.annual_pence / 100).toLocaleString("en-GB", {minimumFractionDigits:2})}/yr`;
+            const notesStr = e.notes ? ` · ${e.notes}` : "";
+            return `
+                <button onclick="selectVoidEntry(${e.id})"
+                    id="void-entry-btn-${e.id}"
+                    class="w-full text-left px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors text-sm flex justify-between items-center gap-3">
+                    <span class="text-gray-300">${e.entry_date}${notesStr}</span>
+                    <span class="font-mono text-emerald-400 flex-shrink-0">${val}</span>
+                </button>`;
+        }).join("");
+
+        const totalPages = Math.ceil(voidEntriesData.length / VOID_PAGE_SIZE);
+
+        const controls = `
+        <div class="flex justify-between items-center mt-2 text-xs text-gray-400">
+            <button onclick="prevVoidPage()" ${voidEntriesPage === 0 ? "disabled class='opacity-30 cursor-not-allowed'" : "class='hover:text-white transition-colors'"}>
+                ← Previous
+            </button>
+            <span>Page ${voidEntriesPage + 1} of ${totalPages}</span>
+            <button onclick="nextVoidPage()" ${voidEntriesPage >= totalPages - 1 ? "disabled class='opacity-30 cursor-not-allowed'" : "class='hover:text-white transition-colors'"}>
+                Next →
+            </button>
+        </div>
+        `;
+
+        listEl.innerHTML = entriesHtml + controls;
+        document.getElementById("void-entries-wrap").classList.remove("hidden");
+    }
+
+    function nextVoidPage() {
+        const maxPage = Math.ceil(voidEntriesData.length / VOID_PAGE_SIZE) - 1;
+        if (voidEntriesPage < maxPage) {
+            voidEntriesPage++;
+            renderVoidEntriesPage();
+        }
+    }
+
+    function prevVoidPage() {
+        if (voidEntriesPage > 0) {
+            voidEntriesPage--;
+            renderVoidEntriesPage();
+        }
+    }
+
+    async function loadVoidEntries() {
+        const accountId = document.getElementById("void-account").value;
+        document.getElementById("void-edit-wrap").classList.add("hidden");
+        document.getElementById("void-entries-wrap").classList.add("hidden");
+        selectedVoidEntryId = null;
+        if (!accountId) return;
+
+        const account = allAccounts.find(a => a.id == accountId);
+        voidEntryIsPot = account ? POT_SUBTYPES.includes(account.subtype) : false;
+
+        const res = await fetch(`/api/pension-entries-list?account_id=${accountId}`);
+        voidEntriesData = await res.json();
+        voidEntriesPage = 0;
+
+        const listEl = document.getElementById("void-entries-list");
+        if (!voidEntriesData.length) {
+            listEl.innerHTML = '<p class="text-sm text-gray-500">No entries found.</p>';
+            document.getElementById("void-entries-wrap").classList.remove("hidden");
+            return;
+        }
+
+        renderVoidEntriesPage();
+    }
+
+    function selectVoidEntry(entryId) {
+        selectedVoidEntryId = entryId;
+        // Highlight selected
+        document.querySelectorAll("[id^='void-entry-btn-']").forEach(btn => {
+            btn.classList.toggle("ring-1", btn.id === `void-entry-btn-${entryId}`);
+            btn.classList.toggle("ring-blue-500", btn.id === `void-entry-btn-${entryId}`);
+        });
+
+        // Find entry data from the rendered list — re-fetch by looking at allAccounts entries
+        const accountId = document.getElementById("void-account").value;
+        const account   = allAccounts.find(a => a.id == accountId);
+        const entry     = account?.entries?.find(e => e.id === entryId);
+        if (!entry) return;
+
+        // Populate edit form
+        const labelEl = document.getElementById("void-edit-label");
+        labelEl.textContent = entry.entry_date;
+        document.getElementById("void-edit-date").value  = entry.entry_date;
+        document.getElementById("void-edit-notes").value = entry.notes || "";
+
+        const valueRow  = document.getElementById("void-edit-value-row");
+        const annualRow = document.getElementById("void-edit-annual-row");
+        if (voidEntryIsPot) {
+            valueRow.classList.remove("hidden");
+            annualRow.classList.add("hidden");
+            document.getElementById("void-edit-value").value = entry.value_pence != null
+                ? (entry.value_pence / 100).toFixed(2) : "";
+        } else {
+            valueRow.classList.add("hidden");
+            annualRow.classList.remove("hidden");
+            document.getElementById("void-edit-annual").value = entry.annual_pence != null
+                ? (entry.annual_pence / 100).toFixed(2) : "";
+        }
+
+        document.getElementById("void-edit-error").classList.add("hidden");
+        document.getElementById("void-edit-wrap").classList.remove("hidden");
+    }
+
+    function cancelVoidEdit() {
+        document.getElementById("void-edit-wrap").classList.add("hidden");
+        selectedVoidEntryId = null;
+        document.querySelectorAll("[id^='void-entry-btn-']").forEach(btn => {
+            btn.classList.remove("ring-1", "ring-blue-500");
+        });
+    }
+
+    async function saveVoidEdit() {
+        if (!selectedVoidEntryId) return;
+        const errEl = document.getElementById("void-edit-error");
+        errEl.classList.add("hidden");
+
+        const payload = {
+            entry_date: document.getElementById("void-edit-date").value,
+            notes:      document.getElementById("void-edit-notes").value.trim() || null
+        };
+        if (voidEntryIsPot) {
+            payload.value = document.getElementById("void-edit-value").value;
+        } else {
+            payload.annual = document.getElementById("void-edit-annual").value;
+        }
+
+        const res  = await fetch(`/api/pension-entries/${selectedVoidEntryId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            errEl.textContent = data.error || "Failed to save.";
+            errEl.classList.remove("hidden");
+            return;
+        }
+        closeVoidModal();
+        load();
+    }
+
+    async function voidSelectedEntry() {
+        if (!selectedVoidEntryId) return;
+        if (!confirm("Void this entry? It will be removed from all views.")) return;
+        const res = await fetch(`/api/pension-entries/${selectedVoidEntryId}/void`, { method: "POST" });
+        if (res.ok) {
+            closeVoidModal();
+            load();
+        }
+    }
+
+    attachPreviews();
+    load();
+</script>
+{% endblock %}

@@ -1,0 +1,319 @@
+{% extends "layout.html" %}
+{% block title %}Finance Tracker{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto p-8">
+
+    <h1 class="text-2xl font-semibold mb-6">Accounts</h1>
+
+    <!-- Add Account Form -->
+    <div class="bg-gray-900 rounded-xl p-6 mb-8">
+        <h2 class="text-lg font-medium mb-4">Add Account</h2>
+        <div class="space-y-4">
+
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Account Name</label>
+                <input id="name" type="text" placeholder="e.g. Lloyds Current Account"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+            </div>
+
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Account Type</label>
+                <select id="type" onchange="onTypeChange('type', 'interest-rate-row')"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+                    <option value="">— Select type —</option>
+                    <option value="current">Current</option>
+                    <option value="savings">Savings</option>
+                    <option value="credit_card">Credit Card</option>
+                    <option value="isa">ISA</option>
+                    <option value="investment">Investment</option>
+                    <option value="cash">Cash</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+
+            <div id="interest-rate-row" class="hidden">
+                <label class="block text-sm text-gray-400 mb-1">Interest Rate / AER (%) <span class="text-gray-600">(optional)</span></label>
+                <input id="interest_rate" type="number" step="0.01" min="0" placeholder="e.g. 4.5"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+            </div>
+
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Opening Balance (£)</label>
+                <input id="opening_balance" type="number" step="0.01" placeholder="0.00"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+                <p id="opening-balance-preview" class="text-sm text-gray-500 mt-1 hidden"></p>
+            </div>
+
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Opening Date</label>
+                <input id="opening_date" type="date"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+            </div>
+
+            <div id="add-error" class="text-red-400 text-sm hidden"></div>
+
+            <button onclick="addAccount()"
+                class="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg px-4 py-2 transition-colors">
+                Add Account
+            </button>
+        </div>
+    </div>
+
+    <!-- Accounts List -->
+    <div class="bg-gray-900 rounded-xl p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-medium">Your Accounts</h2>
+            <p class="text-xs text-gray-500">Use ↑ ↓ to set display order</p>
+        </div>
+        <div id="accounts-list">
+            <p class="text-gray-500 text-sm">Loading...</p>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    const RATE_TYPES = ["savings", "isa", "investment"];
+
+    function onTypeChange(selectId, rowId) {
+        const type = document.getElementById(selectId).value;
+        const row  = document.getElementById(rowId);
+        RATE_TYPES.includes(type) ? row.classList.remove("hidden") : row.classList.add("hidden");
+    }
+
+    async function loadAccounts() {
+        const response = await fetch("/api/accounts");
+        const accounts = await response.json();
+        const container = document.getElementById("accounts-list");
+
+        if (accounts.length === 0) {
+            container.innerHTML = '<p class="text-gray-500 text-sm">No accounts yet.</p>';
+            return;
+        }
+
+        container.innerHTML = accounts.map((a, index) => {
+            const isNegative = a.current_balance_pence < 0;
+            const balanceClass = isNegative ? "text-red-400" : "text-emerald-400";
+            const typeLabel = a.type.replace("_", " ");
+            const rateTag = RATE_TYPES.includes(a.type) && a.interest_rate != null
+                ? `<span class="ml-2 text-xs bg-blue-900 text-blue-300 px-1.5 py-0.5 rounded-full">${a.interest_rate}% AER</span>`
+                : "";
+            const openingBalancePounds = (a.opening_balance_pence / 100).toFixed(2);
+            const rateValue = a.interest_rate != null ? a.interest_rate : "";
+            const isFirst = index === 0;
+            const isLast  = index === accounts.length - 1;
+
+            return `
+            <div class="border-b border-gray-800 last:border-0" id="account-row-${a.id}">
+
+                <!-- Display row -->
+                <div class="flex items-center py-3 gap-2" id="account-display-${a.id}">
+
+                    <!-- Up/down arrows -->
+                    <div class="flex flex-col gap-0.5 flex-shrink-0">
+                        <button onclick="moveAccount(${a.id}, 'up')"
+                            class="text-gray-600 hover:text-gray-300 transition-colors disabled:opacity-20 leading-none"
+                            ${isFirst ? 'disabled' : ''}>▲</button>
+                        <button onclick="moveAccount(${a.id}, 'down')"
+                            class="text-gray-600 hover:text-gray-300 transition-colors disabled:opacity-20 leading-none"
+                            ${isLast ? 'disabled' : ''}>▼</button>
+                    </div>
+
+                    <!-- Account info -->
+                    <div class="flex-1 min-w-0">
+                        <p class="font-medium">${a.name}${rateTag}</p>
+                        <p class="text-sm text-gray-400 capitalize">${typeLabel}</p>
+                    </div>
+
+                    <!-- Balance + actions -->
+                    <div class="flex items-center gap-3 flex-shrink-0">
+                        <p class="font-mono font-medium ${balanceClass}">${formatPence(a.current_balance_pence)}</p>
+                        <button onclick="showEditAccount(${a.id})"
+                            class="text-xs text-gray-500 hover:text-blue-400 transition-colors">Edit</button>
+                        <button 
+                            onclick="toggleOverviewVisibility(${a.id}, ${a.show_on_overview === 0 ? 1 : 0})"
+                            class="text-xs transition-colors ${a.show_on_overview === 0 ? 'text-amber-500 hover:text-amber-300' : 'text-gray-500 hover:text-amber-400'}"
+                            title="${a.show_on_overview === 0 ? 'Show on overview' : 'Hide from overview'}">
+                            ${a.show_on_overview === 0 ? 'Show' : 'Hide'}
+                        </button>
+                        <button onclick="deactivateAccount(${a.id}, '${a.name.replace(/'/g, "\\'")}')"
+                            class="text-xs text-gray-500 hover:text-red-400 transition-colors">Deactivate</button>
+                    </div>
+                </div>
+
+                <!-- Edit row -->
+                <div class="hidden pb-4 space-y-3" id="account-edit-${a.id}">
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Name</label>
+                        <input id="edit-name-${a.id}" type="text" value="${a.name}"
+                            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Type</label>
+                            <select id="edit-type-${a.id}" onchange="onTypeChange('edit-type-${a.id}', 'edit-rate-row-${a.id}')"
+                                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                                <option value="current"     ${a.type==='current'     ?'selected':''}>Current</option>
+                                <option value="savings"     ${a.type==='savings'     ?'selected':''}>Savings</option>
+                                <option value="credit_card" ${a.type==='credit_card' ?'selected':''}>Credit Card</option>
+                                <option value="isa"         ${a.type==='isa'         ?'selected':''}>ISA</option>
+                                <option value="investment"  ${a.type==='investment'  ?'selected':''}>Investment</option>
+                                <option value="cash"        ${a.type==='cash'        ?'selected':''}>Cash</option>
+                                <option value="other"       ${a.type==='other'       ?'selected':''}>Other</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Opening Date</label>
+                            <input id="edit-date-${a.id}" type="date" value="${a.opening_date}"
+                                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Opening Balance (£)</label>
+                            <input id="edit-balance-${a.id}" type="number" step="0.01" value="${openingBalancePounds}"
+                                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                        </div>
+                        <div id="edit-rate-row-${a.id}" class="${RATE_TYPES.includes(a.type) ? '' : 'hidden'}">
+                            <label class="block text-xs text-gray-400 mb-1">Interest Rate / AER (%)</label>
+                            <input id="edit-rate-${a.id}" type="number" step="0.01" value="${rateValue}" placeholder="e.g. 4.5"
+                                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                        </div>
+                    </div>
+                    <div id="edit-error-${a.id}" class="text-red-400 text-xs hidden"></div>
+                    <div class="flex gap-2">
+                        <button onclick="saveAccount(${a.id})"
+                            class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg px-4 py-1.5 transition-colors">Save</button>
+                        <button onclick="cancelEditAccount(${a.id})"
+                            class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-medium rounded-lg px-4 py-1.5 transition-colors">Cancel</button>
+                    </div>
+                </div>
+
+            </div>
+            `;
+        }).join("");
+    }
+
+    window.toggleOverviewVisibility = async function(id, newValue) {
+    try {
+        const response = await fetch(`/api/accounts/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ show_on_overview: newValue })
+        });
+
+        if (response.ok) {
+            // 1. Find the button using the ID we passed in
+            const btn = document.querySelector(`button[onclick*="toggleOverviewVisibility(${id}"]`);
+            
+            if (btn) {
+                const isHiding = newValue === 0;
+                
+                // 2. Update the text and colors immediately (No Refresh!)
+                btn.textContent = isHiding ? 'Show' : 'Hide';
+                btn.className = isHiding 
+                    ? "text-xs transition-colors text-amber-500 hover:text-amber-300" 
+                    : "text-xs transition-colors text-gray-500 hover:text-amber-400";
+                
+                // 3. Update the click command so the NEXT click does the opposite
+                const nextValue = isHiding ? 1 : 0;
+                btn.setAttribute('onclick', `toggleOverviewVisibility(${id}, ${nextValue})`);
+            }
+        }
+    } catch (err) {
+        console.error("Error toggling visibility:", err);
+    }
+};
+
+    async function moveAccount(id, direction) {
+        await fetch(`/api/accounts/${id}/move`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ direction })
+        });
+        loadAccounts();
+    }
+
+    function showEditAccount(id) {
+        document.getElementById(`account-display-${id}`).classList.add("hidden");
+        document.getElementById(`account-edit-${id}`).classList.remove("hidden");
+    }
+
+    function cancelEditAccount(id) {
+        document.getElementById(`account-display-${id}`).classList.remove("hidden");
+        document.getElementById(`account-edit-${id}`).classList.add("hidden");
+    }
+
+    async function saveAccount(id) {
+        const errorBox = document.getElementById(`edit-error-${id}`);
+        errorBox.classList.add("hidden");
+
+        const payload = {
+            name:            document.getElementById(`edit-name-${id}`).value,
+            type:            document.getElementById(`edit-type-${id}`).value,
+            opening_date:    document.getElementById(`edit-date-${id}`).value,
+            opening_balance: document.getElementById(`edit-balance-${id}`).value,
+            interest_rate:   document.getElementById(`edit-rate-${id}`)?.value || ""
+        };
+
+        const response = await fetch(`/api/accounts/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+            errorBox.textContent = result.error;
+            errorBox.classList.remove("hidden");
+            return;
+        }
+        loadAccounts();
+    }
+
+    async function deactivateAccount(id, name) {
+        if (!confirm(`Deactivate "${name}"? It will no longer appear in dropdowns or on the overview.`)) return;
+        const response = await fetch(`/api/accounts/${id}/deactivate`, { method: "POST" });
+        if (response.ok) loadAccounts();
+    }
+
+    async function addAccount() {
+        const errorBox = document.getElementById("add-error");
+        errorBox.classList.add("hidden");
+
+        const payload = {
+            name:            document.getElementById("name").value,
+            type:            document.getElementById("type").value,
+            opening_balance: document.getElementById("opening_balance").value,
+            opening_date:    document.getElementById("opening_date").value,
+            interest_rate:   document.getElementById("interest_rate").value || null
+        };
+
+        const response = await fetch("/api/accounts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+            errorBox.textContent = result.error;
+            errorBox.classList.remove("hidden");
+            return;
+        }
+
+        document.getElementById("name").value            = "";
+        document.getElementById("type").value            = "";
+        document.getElementById("opening_balance").value = "";
+        document.getElementById("opening_date").value    = "";
+        document.getElementById("interest_rate").value   = "";
+        document.getElementById("interest-rate-row").classList.add("hidden");
+        document.getElementById("opening-balance-preview").classList.add("hidden");
+        loadAccounts();
+    }
+
+    attachAmountPreview("opening_balance", "opening-balance-preview");
+    loadAccounts();
+</script>
+{% endblock %}

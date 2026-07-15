@@ -1,0 +1,401 @@
+{% extends "layout.html" %}
+{% block title %}Investment Projections — Finance Tracker{% endblock %}
+
+{% block content %}
+<div class="p-8">
+
+    <h1 class="text-2xl font-semibold mb-6">Investment Projections</h1>
+
+    <!-- No accounts notice -->
+    <div id="no-accounts-notice" class="hidden bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
+        <p class="text-gray-400 font-medium mb-1">No investment or ISA accounts found</p>
+        <p class="text-sm text-gray-600">Add an investment or ISA account and record at least two valuations to see projections here.</p>
+        <a href="/accounts" class="inline-block mt-4 text-sm text-blue-400 hover:text-blue-300">Go to Accounts →</a>
+    </div>
+
+    <!-- Main content -->
+    <div id="main-content" class="hidden">
+
+        <!-- Summary stat cards — update on tab switch -->
+        <div id="summary-cards" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6"></div>
+
+        <!-- Account switcher + chart panel -->
+        <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden mb-6">
+
+            <!-- Tab switcher attached to top of chart -->
+            <div id="tab-bar" class="border-b border-gray-800 px-4 pt-3 pb-0 flex gap-1 flex-wrap"></div>
+
+            <!-- Chart area -->
+            <div class="p-6">
+                <div id="chart-wrap" style="position:relative; height: 400px;">
+                    <canvas id="proj-chart"></canvas>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Scenario cards row -->
+        <div id="scenario-cards" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6"></div>
+
+        <!-- Monthly projection accordion (collapsed by default) -->
+        <div id="monthly-accordion"></div>
+
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+    let allData    = null;
+    let activeTab  = null;
+    let activeChart = null;
+
+    function fmt(val) {
+        const abs    = Math.abs(val);
+        const prefix = val < 0 ? "−£" : "£";
+        return prefix + abs.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function fmtPct(val) {
+        return val.toFixed(2) + "%";
+    }
+
+    function gainClass(val) {
+        return val >= 0 ? "text-emerald-400" : "text-red-400";
+    }
+
+    // -----------------------------------------------------------------------
+    // Accordion toggle (monthly table)
+    // -----------------------------------------------------------------------
+
+    function toggleMonthlyTable() {
+        const body    = document.getElementById("monthly-table-body");
+        const chevron = document.getElementById("monthly-chevron");
+        const hidden  = body.classList.contains("hidden");
+        body.classList.toggle("hidden", !hidden);
+        chevron.style.transform = hidden ? "rotate(90deg)" : "";
+    }
+
+    // -----------------------------------------------------------------------
+    // Tab switching
+    // -----------------------------------------------------------------------
+
+    function switchTab(accountId) {
+        if (activeTab === accountId) return;
+        activeTab = accountId;
+
+        // Update tab button styles
+        allData.accounts.forEach(a => {
+            const btn = document.getElementById(`tab-btn-${a.id}`);
+            if (!btn) return;
+            btn.className = `px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                a.id === accountId
+                    ? "border-blue-500 text-white"
+                    : "border-transparent text-gray-500 hover:text-gray-300"
+            }`;
+        });
+
+        const account = allData.accounts.find(a => a.id === accountId);
+        if (!account) return;
+
+        updateSummaryCards(account);
+
+        if (account.status === "ok") {
+            updateChart(account);
+            updateScenarioCards(account);
+            updateMonthlyTable(account);
+        } else {
+            // Show insufficient-data state inside the chart area
+            showChartPlaceholder(account);
+            document.getElementById("scenario-cards").innerHTML = "";
+            document.getElementById("monthly-accordion").innerHTML = "";
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Summary cards
+    // -----------------------------------------------------------------------
+
+    function updateSummaryCards(account) {
+        const el = document.getElementById("summary-cards");
+
+        if (account.status !== "ok") {
+            el.innerHTML = `
+                <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 md:col-span-4 text-center">
+                    <p class="text-gray-400 font-medium mb-1">${account.status === "no_data" ? "No valuations recorded yet" : "Not enough valuations yet"}</p>
+                    <p class="text-sm text-gray-600 mb-3">${account.message}</p>
+                    <a href="/valuations" class="text-sm text-blue-400 hover:text-blue-300">
+                        ${account.status === "no_data" ? "Add a valuation →" : "Add another valuation →"}
+                    </a>
+                </div>`;
+            return;
+        }
+
+        el.innerHTML = `
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                <p class="text-xs text-gray-500 uppercase tracking-wide mb-1">Current value</p>
+                <p class="text-2xl font-mono font-semibold text-emerald-400">${fmt(account.current_value)}</p>
+                <p class="text-xs text-gray-600 mt-1">${account.type.toUpperCase()}</p>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                <p class="text-xs text-gray-500 uppercase tracking-wide mb-1">Est. return this month</p>
+                <p class="text-2xl font-mono font-semibold text-blue-400">${fmt(account.proj_monthly_return)}</p>
+                <p class="text-xs text-gray-600 mt-1">from valuation history</p>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                <p class="text-xs text-gray-500 uppercase tracking-wide mb-1">Implied annual return</p>
+                <p class="text-2xl font-mono font-semibold text-blue-400">${fmtPct(account.annualised_return)}</p>
+                <p class="text-xs text-gray-600 mt-1">from valuation history</p>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                <p class="text-xs text-gray-500 uppercase tracking-wide mb-1">Total return — 12 month</p>
+                <p class="text-2xl font-mono font-semibold text-blue-400">${fmt(account.proj_base[11] - account.current_value)}</p>
+                <p class="text-xs text-gray-600 mt-1">base projection</p>
+            </div>
+        `;
+    }
+
+    // -----------------------------------------------------------------------
+    // Chart
+    // -----------------------------------------------------------------------
+
+    function showChartPlaceholder(account) {
+        const wrap = document.getElementById("chart-wrap");
+        wrap.innerHTML = `
+            <div class="flex items-center justify-center h-full">
+                <p class="text-gray-600 text-sm">${account.message || "No projection available."}</p>
+            </div>`;
+    }
+
+    function updateChart(account) {
+        // Restore canvas if it was replaced by a placeholder
+        const wrap = document.getElementById("chart-wrap");
+        if (!document.getElementById("proj-chart")) {
+            wrap.innerHTML = `<canvas id="proj-chart"></canvas>`;
+            wrap.style.position = "relative";
+            wrap.style.height   = "400px";
+        }
+
+        if (activeChart) { activeChart.destroy(); activeChart = null; }
+
+        const negReturn  = account.annualised_return < 0;
+        const worstData  = negReturn ? account.proj_optimistic  : account.proj_pessimistic;
+        const bestData   = negReturn ? account.proj_pessimistic : account.proj_optimistic;
+        const worstLabel = negReturn ? "Pessimistic (1.5× rate)" : "Pessimistic (½ rate)";
+        const bestLabel  = negReturn ? "Optimistic (½ rate)"     : "Optimistic (1.5× rate)";
+
+        // Prepend "Now" anchor point
+        const labels   = ["Now", ...allData.months];
+        const nowVal   = account.current_value;
+
+        activeChart = new Chart(
+            document.getElementById("proj-chart").getContext("2d"), {
+            type: "line",
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label:            bestLabel,
+                        data:             [nowVal, ...bestData],
+                        borderColor:      "#34d399",
+                        backgroundColor:  "rgba(52,211,153,0.08)",
+                        borderWidth:      1.5,
+                        borderDash:       [4, 3],
+                        pointRadius:      2,
+                        pointHoverRadius: 4,
+                        tension:          0.3,
+                        fill:             false,
+                        hidden:           true
+                    },
+                    {
+                        label:            "Base (implied rate)",
+                        data:             [nowVal, ...account.proj_base],
+                        borderColor:      "#60a5fa",
+                        backgroundColor:  "rgba(96,165,250,0.1)",
+                        borderWidth:      2.5,
+                        pointRadius:      3,
+                        pointHoverRadius: 5,
+                        tension:          0.3,
+                        fill:             false
+                    },
+                    {
+                        label:            worstLabel,
+                        data:             [nowVal, ...worstData],
+                        borderColor:      "#f87171",
+                        backgroundColor:  "rgba(248,113,113,0.08)",
+                        borderWidth:      1.5,
+                        borderDash:       [4, 3],
+                        pointRadius:      2,
+                        pointHoverRadius: 4,
+                        tension:          0.3,
+                        fill:             false,
+                        hidden:           true
+                    }
+                ]
+            },
+            options: {
+                responsive:          true,
+                maintainAspectRatio: false,
+                interaction:         { mode: "index", intersect: false },
+                plugins: {
+                    legend: {
+                        display:  true,
+                        position: "bottom",
+                        labels:   { color: "#9ca3af", boxWidth: 12, padding: 16, font: { size: 12 } }
+                    },
+                    tooltip: {
+                        backgroundColor: "#1f2937",
+                        titleColor:      "#f3f4f6",
+                        bodyColor:       "#d1d5db",
+                        borderColor:     "#374151",
+                        borderWidth:     1,
+                        callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid:  { color: "rgba(255,255,255,0.05)" },
+                        ticks: { color: "#6b7280", font: { size: 11 } }
+                    },
+                    y: {
+                        grid:  { color: "rgba(255,255,255,0.05)" },
+                        ticks: { color: "#6b7280", font: { size: 11 },
+                            callback: v => "£" + v.toLocaleString("en-GB") }
+                    }
+                }
+            }
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Scenario cards
+    // -----------------------------------------------------------------------
+
+    function updateScenarioCards(account) {
+        const negReturn  = account.annualised_return < 0;
+        const worst12m   = negReturn ? account.proj_optimistic[11]  : account.proj_pessimistic[11];
+        const best12m    = negReturn ? account.proj_pessimistic[11] : account.proj_optimistic[11];
+        const base12m    = account.proj_base[11];
+        const worstGain  = worst12m - account.current_value;
+        const bestGain   = best12m  - account.current_value;
+        const baseGain   = base12m  - account.current_value;
+        const worstLabel = negReturn ? "12M PESSIMISTIC (1.5× RATE)" : "12M PESSIMISTIC (½ RATE)";
+        const bestLabel  = negReturn ? "12M OPTIMISTIC (½ RATE)"     : "12M OPTIMISTIC (1.5× RATE)";
+
+        document.getElementById("scenario-cards").innerHTML = `
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                <p class="text-xs text-gray-500 uppercase tracking-wide mb-1">${worstLabel}</p>
+                <p class="text-2xl font-mono font-semibold text-red-400">${fmt(worst12m)}</p>
+                <p class="text-xs text-red-600 mt-1 privacy-blind">${fmt(worstGain)}</p>
+            </div>
+            <div class="bg-gray-900 border border-blue-900 rounded-xl p-5">
+                <p class="text-xs text-gray-500 uppercase tracking-wide mb-1">12M BASE (IMPLIED RATE)</p>
+                <p class="text-2xl font-mono font-semibold text-blue-400">${fmt(base12m)}</p>
+                <p class="text-xs text-blue-600 mt-1 privacy-blind">${fmt(baseGain)}</p>
+            </div>
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                <p class="text-xs text-gray-500 uppercase tracking-wide mb-1">${bestLabel}</p>
+                <p class="text-2xl font-mono font-semibold text-emerald-400">${fmt(best12m)}</p>
+                <p class="text-xs text-emerald-600 mt-1 privacy-blind">${fmt(bestGain)}</p>
+            </div>
+        `;
+    }
+
+    // -----------------------------------------------------------------------
+    // Monthly table accordion
+    // -----------------------------------------------------------------------
+
+    function updateMonthlyTable(account) {
+        const negReturn  = account.annualised_return < 0;
+        const worstData  = negReturn ? account.proj_optimistic  : account.proj_pessimistic;
+        const bestData   = negReturn ? account.proj_pessimistic : account.proj_optimistic;
+        const worstLabel = negReturn ? "Pessimistic (1.5× rate)" : "Pessimistic (½ rate)";
+        const bestLabel  = negReturn ? "Optimistic (½ rate)"     : "Optimistic (1.5× rate)";
+
+        const tableRows = allData.months.map((month, mi) => `
+            <tr class="hover:bg-gray-800 transition-colors">
+                <td class="px-4 py-2.5 text-gray-400">${month}</td>
+                <td class="px-4 py-2.5 text-right font-mono text-red-400">${fmt(worstData[mi])}</td>
+                <td class="px-4 py-2.5 text-right font-mono text-blue-400 font-medium">${fmt(account.proj_base[mi])}</td>
+                <td class="px-4 py-2.5 text-right font-mono text-emerald-400">${fmt(bestData[mi])}</td>
+            </tr>`).join("");
+
+        document.getElementById("monthly-accordion").innerHTML = `
+            <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                <button onclick="toggleMonthlyTable()"
+                    class="w-full px-6 py-4 flex items-center gap-3 hover:bg-gray-800 transition-colors text-left">
+                    <svg id="monthly-chevron"
+                        class="w-4 h-4 text-gray-500 flex-shrink-0 transition-transform duration-200"
+                        fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                    <div class="flex-1 min-w-0">
+                        <p class="font-medium text-gray-100">Monthly Projection</p>
+                        <p class="text-xs text-gray-500 mt-0.5">All three scenarios month by month</p>
+                    </div>
+                </button>
+                <div id="monthly-table-body" class="hidden">
+                    <div class="overflow-x-auto border-t border-gray-800">
+                        <table class="w-full text-sm table-fixed">
+                            <thead>
+                                <tr class="text-gray-500 border-b border-gray-800">
+                                    <th class="text-left px-4 py-2.5 font-medium">Month</th>
+                                    <th class="text-right px-4 py-2.5 font-medium text-red-400/80">${worstLabel}</th>
+                                    <th class="text-right px-4 py-2.5 font-medium text-blue-400">Base Projection</th>
+                                    <th class="text-right px-4 py-2.5 font-medium text-emerald-400/80">${bestLabel}</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-800">
+                                <tr class="bg-gray-800/50">
+                                    <td class="px-4 py-2.5 text-gray-500 italic">Now</td>
+                                    <td class="px-4 py-2.5 text-right font-mono text-gray-400">—</td>
+                                    <td class="px-4 py-2.5 text-right font-mono text-gray-400">${fmt(account.current_value)}</td>
+                                    <td class="px-4 py-2.5 text-right font-mono text-gray-400">—</td>
+                                </tr>
+                                ${tableRows}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>`;
+    }
+
+    // -----------------------------------------------------------------------
+    // Main load
+    // -----------------------------------------------------------------------
+
+    async function load() {
+        const res = await fetch("/api/reports/investment-projections");
+        allData   = await res.json();
+
+        if (!allData.accounts || allData.accounts.length === 0) {
+            document.getElementById("no-accounts-notice").classList.remove("hidden");
+            return;
+        }
+
+        document.getElementById("main-content").classList.remove("hidden");
+
+        const multiAccount = allData.accounts.length > 1;
+
+        // Build tab bar (underline style, attached to chart card top)
+        // Hidden entirely for single account
+        const tabBar = document.getElementById("tab-bar");
+        if (multiAccount) {
+            tabBar.innerHTML = allData.accounts.map(account => `
+                <button id="tab-btn-${account.id}"
+                    onclick="switchTab(${account.id})"
+                    class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-300 transition-colors -mb-px">
+                    ${account.name}
+                </button>`).join("");
+        } else {
+            // Single account — hide the tab bar entirely, show account name as label
+            tabBar.classList.add("hidden");
+        }
+
+        // Activate first account
+        switchTab(allData.accounts[0].id);
+    }
+
+    load();
+</script>
+{% endblock %}

@@ -1,0 +1,217 @@
+{% extends "layout.html" %}
+{% block title %}Finance Tracker{% endblock %}
+
+{% block content %}
+<div class="p-8">
+
+    <h1 class="text-2xl font-semibold mb-6">Overview</h1>
+
+    <!-- Net worth summary -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 flex items-center justify-between col-span-2">
+            <div>
+                <p class="text-sm text-gray-400">Total Net Worth</p>
+                <p id="net-worth" class="text-3xl font-semibold font-mono mt-1">—</p>
+            </div>
+            <div class="text-right">
+                <p class="text-sm text-gray-400">Across</p>
+                <p id="account-count" class="text-3xl font-semibold mt-1">—</p>
+                <p class="text-sm text-gray-500">accounts</p>
+            </div>
+        </div>
+
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 flex flex-col justify-center">
+            <p class="text-sm text-gray-400">Change since <span id="prior-month-label">—</span></p>
+            <div class="flex items-end gap-3 mt-1">
+                <p id="month-change-amount" class="text-3xl font-semibold font-mono">—</p>
+                <p id="month-change-pct" class="text-lg font-mono text-gray-400 mb-0.5">—</p>
+            </div>
+        </div>
+
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 flex flex-col justify-center">
+            <p class="text-sm text-gray-400">Change since <span id="ytd-label">—</span></p>
+            <div class="flex items-end gap-3 mt-1">
+                <p id="ytd-change-amount" class="text-3xl font-semibold font-mono">—</p>
+                <p id="ytd-change-pct" class="text-lg font-mono text-gray-400 mb-0.5">—</p>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Account balance cards -->
+    <div id="account-cards" class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-8">
+        <div class="text-gray-500 text-sm col-span-4">Loading accounts...</div>
+    </div>
+
+    <!-- Recent activity -->
+    <div class="bg-gray-900 rounded-xl p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-medium">Recent Activity</h2>
+            <a href="/transactions" class="text-sm text-blue-400 hover:text-blue-300">View transactions →</a>
+        </div>
+        <div id="recent-activity" class="overflow-y-auto pr-4" style="max-height: 420px;">
+            <p class="text-gray-500 text-sm">Loading...</p>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    const RATE_TYPES = ["savings", "isa", "investment"];
+
+    async function loadOverview() {
+        // Net worth summary
+        const summaryRes = await fetch("/api/net-worth-summary");
+        const summary = await summaryRes.json();
+
+        const netWorthEl = document.getElementById("net-worth");
+        netWorthEl.textContent = formatPence(summary.current_net_worth_pence);
+        netWorthEl.className = `text-3xl font-semibold font-mono mt-1 ${summary.current_net_worth_pence < 0 ? "text-red-400" : "text-emerald-400"}`;
+
+        document.getElementById("prior-month-label").textContent = summary.prior_month_label;
+
+        const { text: changeText, colourClass: changeClass } = formatPenceSigned(summary.month_change_pence);
+        const changeEl = document.getElementById("month-change-amount");
+        changeEl.textContent = changeText;
+        changeEl.className = `text-3xl font-semibold font-mono ${changeClass}`;
+
+        // Percentage — fixed to 2 decimal places
+        const pctSign = summary.month_change_pct >= 0 ? "+" : "";
+        const pctEl = document.getElementById("month-change-pct");
+        pctEl.textContent = `${pctSign}${summary.month_change_pct.toFixed(2)}%`;
+        pctEl.className = `text-lg font-mono mb-0.5 ${summary.month_change_pence >= 0 ? "text-emerald-600" : "text-red-600"}`;
+
+        // YTD change
+        document.getElementById("ytd-label").textContent = summary.prior_year_label;
+        const { text: ytdText, colourClass: ytdClass } = formatPenceSigned(summary.ytd_change_pence);
+        const ytdEl = document.getElementById("ytd-change-amount");
+        ytdEl.textContent = ytdText;
+        ytdEl.className = `text-3xl font-semibold font-mono ${ytdClass}`;
+        const ytdPctSign = summary.ytd_change_pct >= 0 ? "+" : "";
+        const ytdPctEl = document.getElementById("ytd-change-pct");
+        ytdPctEl.textContent = `${ytdPctSign}${summary.ytd_change_pct.toFixed(2)}%`;
+        ytdPctEl.className = `text-lg font-mono mb-0.5 ${summary.ytd_change_pence >= 0 ? "text-emerald-600" : "text-red-600"}`;
+
+        // Account cards
+        const accountsRes = await fetch("/api/accounts");
+        const accounts = await accountsRes.json();
+        const cardsContainer = document.getElementById("account-cards");
+        document.getElementById("account-count").textContent = accounts.length;
+
+        if (accounts.length === 0) {
+            cardsContainer.innerHTML = '<p class="text-gray-500 text-sm col-span-4">No accounts yet.</p>';
+        } else {
+            cardsContainer.innerHTML = accounts.map(account => {
+                const balancePence = account.current_balance_pence;
+                const isNegative = balancePence < 0;
+                const balanceClass = isNegative ? "text-red-400" : "text-emerald-400";
+                const typeLabel = account.type.replace("_", " ");
+                const rateTag = (RATE_TYPES.includes(account.type) && account.interest_rate != null)
+                    ? `<span class="ml-2 text-xs bg-blue-900 text-blue-300 px-1.5 py-0.5 rounded-full align-middle">${account.interest_rate}%</span>`
+                    : "";
+                return `
+                    <div class="bg-gray-900 rounded-xl p-5 border border-gray-800">
+                        <p class="text-xs text-gray-500 uppercase tracking-wide mb-1">${typeLabel}</p>
+                        <p class="font-medium text-gray-100 mb-3">${account.name}${rateTag}</p>
+                        <p class="text-xl font-mono font-medium ${balanceClass}">${formatPence(balancePence)}</p>
+                    </div>
+                `;
+            }).join("");
+        }
+
+        // Recent activity
+        const activityRes = await fetch("/api/recent-activity");
+        const activity = await activityRes.json();
+        const activityContainer = document.getElementById("recent-activity");
+
+        if (activity.length === 0) {
+            activityContainer.innerHTML = '<p class="text-gray-500 text-sm">No activity yet.</p>';
+            return;
+        }
+
+        activityContainer.innerHTML = activity.map(entry => {
+
+            // --- Merged two-toned pill ---
+            let pillHtml = "";
+            if (entry.type === "transaction") {
+                const isIn    = entry.amount_pence >= 0;
+                const dirCls  = isIn ? "bg-emerald-900 text-emerald-300" : "bg-red-900 text-red-300";
+                const dirText = isIn ? "In" : "Out";
+                pillHtml = `<span class="inline-flex items-center rounded-full overflow-hidden text-xs font-medium">
+                    <span class="px-2 py-0.5 bg-blue-900 text-blue-300">Transaction</span>
+                    <span class="px-2 py-0.5 ${dirCls}">${dirText}</span>
+                </span>`;
+            } else if (entry.type === "transfer") {
+                pillHtml = `<span class="inline-flex items-center rounded-full overflow-hidden text-xs font-medium">
+                    <span class="px-2 py-0.5 bg-blue-900 text-blue-300">Transfer</span>
+                    <span class="px-2 py-0.5 bg-gray-600 text-gray-300">Update</span>
+                </span>`;
+            } else if (entry.type === "valuation") {
+                const isUp    = entry.amount_pence >= 0;
+                const dirCls  = isUp ? "bg-emerald-900 text-emerald-300" : "bg-red-900 text-red-300";
+                const dirText = isUp ? "Up" : "Down";
+                pillHtml = `<span class="inline-flex items-center rounded-full overflow-hidden text-xs font-medium">
+                    <span class="px-2 py-0.5 bg-blue-900 text-blue-300">Valuation</span>
+                    <span class="px-2 py-0.5 ${dirCls}">${dirText}</span>
+                </span>`;
+            }
+
+            // --- Title ---
+            let title = "";
+            if (entry.type === "transaction") {
+                const isIn        = entry.amount_pence >= 0;
+                const payeeOrNote = entry.payee_name || entry.notes || "";
+                const catLeaf     = entry.category_str
+                    ? entry.category_str.includes(" · ")
+                        ? entry.category_str.split(" · ").pop()
+                        : entry.category_str
+                    : "";
+                if (isIn) {
+                    const left = [payeeOrNote, catLeaf].filter(Boolean).join(" · ");
+                    title = `${left} → ${entry.account_name}`;
+                } else {
+                    const right = [payeeOrNote, catLeaf].filter(Boolean).join(" · ");
+                    title = `${entry.account_name} → ${right}`;
+                }
+            } else if (entry.type === "transfer") {
+                title = `${entry.from_account} → ${entry.to_account}`;
+            } else {
+                title = entry.account_name;
+            }
+
+            // --- Amount ---
+            let amountHtml = "";
+            if (entry.type === "transfer") {
+                amountHtml = `<p class="font-mono font-medium text-blue-300 text-right ml-4 flex-shrink-0">${formatPence(entry.amount_pence)}</p>`;
+            } else {
+                const { text: entryText, colourClass: entryClass } = formatPenceSigned(entry.amount_pence);
+                amountHtml = `<p class="font-mono font-medium ${entryClass} text-right ml-4 flex-shrink-0">${entryText}</p>`;
+            }
+
+            // --- Detail line: transactions have none; transfers/valuations show notes if present ---
+            const detailHtml = (entry.type !== "transaction" && entry.notes)
+                ? `<p class="text-sm text-gray-400 mt-0.5">${entry.notes}</p>`
+                : "";
+
+            // Pill sits in a fixed-width box so all titles start at the same horizontal position.
+            // Width is sized to comfortably fit the widest pill: "Transaction | Out"
+            return `
+                <div class="flex justify-between items-start py-3 border-b border-gray-800 last:border-0">
+                    <div class="min-w-0 mr-4">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <div class="flex-shrink-0" style="width:9.5rem">${pillHtml}</div>
+                            <span class="font-medium text-gray-100">${title}</span>
+                            <span class="text-xs text-gray-600 flex-shrink-0">${formatTimestamp(entry.created_at)}</span>
+                        </div>
+                        ${detailHtml}
+                    </div>
+                    ${amountHtml}
+                </div>
+            `;
+        }).join("");
+    }
+
+    loadOverview();
+</script>
+{% endblock %}

@@ -1,0 +1,252 @@
+{% extends "layout.html" %}
+{% block title %}Finance Tracker{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto p-8">
+
+    <h1 class="text-2xl font-semibold mb-6">Categories</h1>
+
+    <!-- Add Category Form -->
+    <div class="bg-gray-900 rounded-xl p-6 mb-8">
+        <h2 class="text-lg font-medium mb-4">Add Category</h2>
+        <div class="space-y-4">
+
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Name</label>
+                <input id="name" type="text" placeholder="e.g. Pet Care"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+            </div>
+
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Parent Category <span class="text-gray-600">(leave blank for top-level)</span></label>
+                <select id="parent_id"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+                    <option value="">— Top-level category —</option>
+                </select>
+            </div>
+
+            <div id="add-error" class="text-red-400 text-sm hidden"></div>
+
+            <button onclick="addCategory()"
+                class="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg px-4 py-2 transition-colors">
+                Add Category
+            </button>
+        </div>
+    </div>
+
+    <!-- Categories List -->
+    <div class="bg-gray-900 rounded-xl p-6">
+        <h2 class="text-lg font-medium mb-4">All Categories</h2>
+        <div id="categories-list">
+            <p class="text-gray-500 text-sm">Loading...</p>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    let allCategories = [];
+
+    async function loadCategories() {
+        const response = await fetch("/api/categories");
+        allCategories = await response.json();
+
+        // Populate parent dropdown (top-level only)
+        const parentSelect = document.getElementById("parent_id");
+        while (parentSelect.options.length > 1) parentSelect.remove(1);
+        allCategories.filter(c => !c.parent_id).forEach(cat => {
+            const option = document.createElement("option");
+            option.value = cat.id;
+            option.textContent = cat.name;
+            parentSelect.appendChild(option);
+        });
+
+        renderCategoryList();
+    }
+
+    function renderCategoryList() {
+        const container = document.getElementById("categories-list");
+        if (allCategories.length === 0) {
+            container.innerHTML = '<p class="text-gray-500 text-sm">No categories yet.</p>';
+            return;
+        }
+
+        const topLevel = allCategories.filter(c => !c.parent_id);
+        const childrenMap = {};
+        allCategories.filter(c => c.parent_id).forEach(c => {
+            if (!childrenMap[c.parent_id]) childrenMap[c.parent_id] = [];
+            childrenMap[c.parent_id].push(c);
+        });
+
+        // Build parent options for edit dropdowns (excluding self)
+        function parentOptions(excludeId) {
+            return topLevel
+                .filter(c => c.id !== excludeId)
+                .map(c => `<option value="${c.id}">${c.name}</option>`)
+                .join("");
+        }
+
+        container.innerHTML = topLevel.map(parent => {
+            const dot = `<span class="inline-block w-2.5 h-2.5 rounded-full mr-2 flex-shrink-0" style="background-color:${parent.colour || '#6b7280'}"></span>`;
+            const kids = childrenMap[parent.id] || [];
+
+            const childRows = kids.map(child => `
+                <div class="border-b border-gray-800 last:border-0" id="cat-row-${child.id}">
+                    <div class="flex items-center justify-between py-2 pl-4" id="cat-display-${child.id}">
+                        <p class="text-sm text-gray-400">— ${child.name}</p>
+                        <div class="flex gap-3">
+                            <button onclick="showEditCategory(${child.id}, '${child.name.replace(/'/g,"\\'")}', ${child.parent_id})"
+                                class="text-xs text-gray-500 hover:text-blue-400 transition-colors">Edit</button>
+                            <button onclick="deactivateCategory(${child.id}, '${child.name.replace(/'/g,"\\'")}', false)"
+                                class="text-xs text-gray-500 hover:text-red-400 transition-colors">Deactivate</button>
+                        </div>
+                    </div>
+                    <div class="hidden pb-3 pl-4 space-y-2" id="cat-edit-${child.id}">
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs text-gray-400 mb-1">Name</label>
+                                <input id="edit-cat-name-${child.id}" type="text" value="${child.name}"
+                                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-400 mb-1">Parent</label>
+                                <select id="edit-cat-parent-${child.id}"
+                                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                                    <option value="">— Top-level —</option>
+                                    ${parentOptions(child.id)}
+                                </select>
+                            </div>
+                        </div>
+                        <div id="edit-cat-error-${child.id}" class="text-red-400 text-xs hidden"></div>
+                        <div class="flex gap-2">
+                            <button onclick="saveCategory(${child.id})"
+                                class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg px-3 py-1.5 transition-colors">Save</button>
+                            <button onclick="cancelEditCategory(${child.id})"
+                                class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium rounded-lg px-3 py-1.5 transition-colors">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            `).join("");
+
+            return `
+                <div class="border-b border-gray-800 last:border-0" id="cat-row-${parent.id}">
+                    <div class="flex items-center justify-between py-3" id="cat-display-${parent.id}">
+                        <p class="font-medium flex items-center">${dot}${parent.name}</p>
+                        <div class="flex gap-3">
+                            <button onclick="showEditCategory(${parent.id}, '${parent.name.replace(/'/g,"\\'")}', null)"
+                                class="text-xs text-gray-500 hover:text-blue-400 transition-colors">Edit</button>
+                            <button onclick="deactivateCategory(${parent.id}, '${parent.name.replace(/'/g,"\\'")}', true)"
+                                class="text-xs text-gray-500 hover:text-red-400 transition-colors">Deactivate</button>
+                        </div>
+                    </div>
+                    <div class="hidden pb-3 space-y-2" id="cat-edit-${parent.id}">
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Name</label>
+                            <input id="edit-cat-name-${parent.id}" type="text" value="${parent.name}"
+                                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+                        </div>
+                        <div id="edit-cat-error-${parent.id}" class="text-red-400 text-xs hidden"></div>
+                        <div class="flex gap-2">
+                            <button onclick="saveCategory(${parent.id})"
+                                class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg px-3 py-1.5 transition-colors">Save</button>
+                            <button onclick="cancelEditCategory(${parent.id})"
+                                class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium rounded-lg px-3 py-1.5 transition-colors">Cancel</button>
+                        </div>
+                    </div>
+                    ${childRows}
+                </div>
+            `;
+        }).join("");
+
+        // Set correct selected parent in edit dropdowns after render
+        allCategories.filter(c => c.parent_id).forEach(c => {
+            const sel = document.getElementById(`edit-cat-parent-${c.id}`);
+            if (sel) sel.value = c.parent_id;
+        });
+    }
+
+    function showEditCategory(id) {
+        document.getElementById(`cat-display-${id}`).classList.add("hidden");
+        document.getElementById(`cat-edit-${id}`).classList.remove("hidden");
+    }
+
+    function cancelEditCategory(id) {
+        document.getElementById(`cat-display-${id}`).classList.remove("hidden");
+        document.getElementById(`cat-edit-${id}`).classList.add("hidden");
+        const errEl = document.getElementById(`edit-cat-error-${id}`);
+        if (errEl) errEl.classList.add("hidden");
+    }
+
+    async function saveCategory(id) {
+        const nameEl   = document.getElementById(`edit-cat-name-${id}`);
+        const parentEl = document.getElementById(`edit-cat-parent-${id}`);
+
+        const payload = {
+            name:      nameEl.value.trim(),
+            parent_id: parentEl ? (parentEl.value || null) : null
+        };
+
+        const response = await fetch(`/api/categories/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+            loadCategories();
+        } else {
+            const result = await response.json();
+            const errEl = document.getElementById(`edit-cat-error-${id}`);
+            if (errEl) {
+                errEl.textContent = result.error || "Failed to save.";
+                errEl.classList.remove("hidden");
+            }
+        }
+    }
+
+    async function deactivateCategory(id, name, hasChildren) {
+        const warning = hasChildren
+            ? `Deactivate "${name}" and all its subcategories?`
+            : `Deactivate "${name}"?`;
+        if (!confirm(`${warning} It will no longer appear in dropdowns.`)) return;
+
+        const response = await fetch(`/api/categories/${id}/deactivate`, { method: "POST" });
+        if (response.ok) loadCategories();
+    }
+
+    async function addCategory() {
+        const errorBox = document.getElementById("add-error");
+        errorBox.classList.add("hidden");
+
+        const payload = {
+            name:      document.getElementById("name").value.trim(),
+            parent_id: document.getElementById("parent_id").value || null
+        };
+
+        if (!payload.name) {
+            errorBox.textContent = "Name is required.";
+            errorBox.classList.remove("hidden");
+            return;
+        }
+
+        const response = await fetch("/api/categories", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+            errorBox.textContent = result.error;
+            errorBox.classList.remove("hidden");
+            return;
+        }
+
+        document.getElementById("name").value      = "";
+        document.getElementById("parent_id").value = "";
+        loadCategories();
+    }
+
+    loadCategories();
+</script>
+{% endblock %}

@@ -1,0 +1,329 @@
+{% extends "layout.html" %}
+{% block title %}Finance Tracker{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto p-8">
+
+    <h1 class="text-2xl font-semibold mb-6">Transfers</h1>
+
+    <div class="bg-gray-900 rounded-xl p-6 mb-8">
+        <h2 class="text-lg font-medium mb-4">New Transfer</h2>
+        <div class="space-y-4">
+
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">From Account</label>
+                <select id="from_account_id"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+                    <option value="">— Select account —</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">To Account</label>
+                <select id="to_account_id"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+                    <option value="">— Select account —</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Amount (£)</label>
+                <input id="amount" type="number" step="0.01" min="0" placeholder="0.00"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+                <p id="amount-preview" class="text-sm text-gray-500 mt-1 hidden"></p>
+            </div>
+
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Date</label>
+                <input id="date" type="date"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+            </div>
+
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">Notes <span class="text-gray-600">(optional)</span></label>
+                <input id="notes" type="text" placeholder="e.g. Monthly savings transfer"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-gray-100 focus:outline-none focus:border-blue-500">
+            </div>
+
+            <!-- Banner shown when correcting an existing transfer -->
+            <div id="correction-notice" class="hidden bg-amber-900 border border-amber-700 rounded-lg px-4 py-2.5 text-sm text-amber-300">
+                <strong>Correcting transfer</strong> — the original will be voided when you save.
+                <button onclick="cancelCorrection()" class="ml-3 underline hover:no-underline text-amber-400">Cancel</button>
+            </div>
+
+            <div id="error-message" class="text-red-400 text-sm hidden"></div>
+
+            <button id="save-btn" onclick="saveTransfer()"
+                class="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg px-4 py-2 transition-colors">
+                Save Transfer
+            </button>
+        </div>
+    </div>
+
+    <div class="bg-gray-900 rounded-xl p-6">
+        <h2 class="text-lg font-medium mb-4">Recent Transfers</h2>
+        <select id="f-from-account" class="hidden"></select> 
+        <select id="f-to-account" class="hidden"></select>
+        <div id="transfers-list">
+            <p class="text-gray-500 text-sm">Loading...</p>
+        </div>
+    </div>
+
+</div>
+
+<!-- Void confirmation modal -->
+<div id="void-modal-backdrop"
+    class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 hidden">
+    <div class="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-sm mx-4 space-y-4">
+        <h2 class="text-base font-medium">Void transfer?</h2>
+        <p class="text-sm text-gray-400">Both legs will be removed from all views but kept in the database.</p>
+        <div>
+            <label class="block text-xs text-gray-400 mb-1">Reason <span class="text-gray-600">(optional)</span></label>
+            <input id="void-reason-input" type="text" placeholder="e.g. Entered in error"
+                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500">
+        </div>
+        <div id="void-modal-error" class="text-red-400 text-sm hidden"></div>
+        <div class="flex gap-3 justify-end">
+            <button onclick="closeVoidModal()"
+                class="bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-lg px-4 py-2 transition-colors">
+                Cancel
+            </button>
+            <button id="void-modal-confirm-btn"
+                class="bg-red-700 hover:bg-red-600 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors">
+                Void
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ID of the transfer being corrected (null = normal add mode)
+    let correctingId  = null;
+    let allAccounts   = [];
+    let idByName      = {};
+
+    // -----------------------------------------------------------------------
+    // Load accounts into both dropdowns
+    // -----------------------------------------------------------------------
+    async function loadAccounts() {
+        const response   = await fetch("/api/accounts");
+        allAccounts      = await response.json();
+        allAccounts.forEach(a => { idByName[a.name] = a.id; });
+
+        const fromSelect = document.getElementById("from_account_id");
+        const toSelect   = document.getElementById("to_account_id");
+        const fFrom      = document.getElementById("f-from-account");
+        const fTo        = document.getElementById("f-to-account");
+
+        // Preserve current selections before clearing
+        const prevFrom  = fromSelect.value;
+        const prevTo    = toSelect.value;
+        const prevFFrom = fFrom.value;
+        const prevFTo   = fTo.value;
+
+        // Clear before rebuilding — prevents duplicates if ever called again
+        fromSelect.innerHTML = '<option value="">— Select account —</option>';
+        toSelect.innerHTML   = '<option value="">— Select account —</option>';
+        fFrom.innerHTML      = '<option value="">All accounts</option>';
+        fTo.innerHTML        = '<option value="">All accounts</option>';
+
+        allAccounts.forEach(a => {
+            const makeOpt = () => {
+                const o = document.createElement("option");
+                o.value = a.id; o.textContent = a.name; return o;
+            };
+            fromSelect.appendChild(makeOpt());
+            toSelect.appendChild(makeOpt());
+            fFrom.appendChild(makeOpt());
+            fTo.appendChild(makeOpt());
+        });
+
+        // Restore selections
+        if (prevFrom)  fromSelect.value = prevFrom;
+        if (prevTo)    toSelect.value   = prevTo;
+        if (prevFFrom) fFrom.value      = prevFFrom;
+        if (prevFTo)   fTo.value        = prevFTo;
+    }
+
+    // -----------------------------------------------------------------------
+    // Load and render transfers list
+    // -----------------------------------------------------------------------
+    async function loadTransfers() {
+        const response  = await fetch("/api/transfers");
+        const transfers = await response.json();
+        const container = document.getElementById("transfers-list");
+
+        if (transfers.length === 0) {
+            container.innerHTML = '<p class="text-gray-500 text-sm">No transfers yet.</p>';
+            return;
+        }
+
+        // idByName is populated by loadAccounts() which runs before this
+
+        container.innerHTML = transfers.map(t => {
+            const notesSuffix  = t.notes ? ` | ${t.notes}` : "";
+            const absAmount    = Math.abs(t.amount_pence);
+            const fromId       = idByName[t.from_account] ?? "";
+            const toId         = idByName[t.to_account]   ?? "";
+            const safeNotes    = (t.notes || "").replace(/'/g, "\\'");
+            return `
+                <div class="border-b border-gray-800 last:border-0" id="transfer-row-${t.id}">
+                    <div class="flex justify-between items-center py-3" id="transfer-display-${t.id}">
+                        <div>
+                            <p class="font-medium">${t.from_account} → ${t.to_account}<span class="text-gray-500 font-normal">${notesSuffix}</span></p>
+                            <p class="text-xs text-gray-600 mt-0.5">${formatTimestamp(t.created_at)}</p>
+                        </div>
+                        <div class="flex items-center gap-3 ml-4">
+                            <p class="font-mono font-medium text-blue-300">${formatPence(absAmount)}</p>
+                            <button onclick="startCorrection(${t.id}, '${fromId}', '${toId}', ${absAmount}, '${t.date}', '${safeNotes}')"
+                                class="text-xs text-gray-500 hover:text-blue-400 transition-colors flex-shrink-0">Correct</button>
+                            <button onclick="voidTransfer(${t.id})"
+                                class="text-xs text-gray-500 hover:text-red-400 transition-colors flex-shrink-0">Void</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join("");
+    }
+
+    // -----------------------------------------------------------------------
+    // Correction workflow
+    // -----------------------------------------------------------------------
+    function startCorrection(id, fromId, toId, amountPence, date, notes) {
+        correctingId = id;
+
+        document.getElementById("from_account_id").value = fromId;
+        document.getElementById("to_account_id").value   = toId;
+        document.getElementById("amount").value          = (amountPence / 100).toFixed(2);
+        document.getElementById("date").value            = date;
+        document.getElementById("notes").value           = notes;
+
+        // Trigger amount preview
+        document.getElementById("amount").dispatchEvent(new Event("input"));
+
+        document.getElementById("correction-notice").classList.remove("hidden");
+        document.getElementById("save-btn").textContent = "Save Correction";
+        document.getElementById("error-message").classList.add("hidden");
+
+        // Scroll to form
+        document.getElementById("from_account_id").scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    function cancelCorrection() {
+        correctingId = null;
+        document.getElementById("from_account_id").value = "";
+        document.getElementById("to_account_id").value   = "";
+        document.getElementById("amount").value          = "";
+        document.getElementById("date").value            = new Date().toISOString().split("T")[0];
+        document.getElementById("notes").value           = "";
+        document.getElementById("amount-preview").classList.add("hidden");
+        document.getElementById("correction-notice").classList.add("hidden");
+        document.getElementById("save-btn").textContent = "Save Transfer";
+        document.getElementById("error-message").classList.add("hidden");
+    }
+
+    // -----------------------------------------------------------------------
+    // Save — handles both normal add and correction
+    // -----------------------------------------------------------------------
+    async function saveTransfer() {
+        const errorBox = document.getElementById("error-message");
+        errorBox.classList.add("hidden");
+
+        const payload = {
+            from_account_id: document.getElementById("from_account_id").value,
+            to_account_id:   document.getElementById("to_account_id").value,
+            amount:          document.getElementById("amount").value,
+            date:            document.getElementById("date").value,
+            notes:           document.getElementById("notes").value
+        };
+
+        if (correctingId !== null) {
+            // Void the original transfer first (this voids both legs automatically)
+            const voidRes = await fetch(`/api/transfers/${correctingId}/void`, { method: "POST" });
+            if (!voidRes.ok) {
+                errorBox.textContent = "Failed to void the original transfer.";
+                errorBox.classList.remove("hidden");
+                return;
+            }
+        }
+
+        // Save the new transfer
+        const response = await fetch("/api/transfers", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+            if (correctingId !== null) {
+                errorBox.textContent = `Original voided but new entry failed: ${result.error}. Please re-enter manually.`;
+            } else {
+                errorBox.textContent = result.error;
+            }
+            errorBox.classList.remove("hidden");
+            return;
+        }
+
+        // Normal success feedback when not correcting
+        if (correctingId === null) {
+            errorBox.textContent = "Transfer saved.";
+            errorBox.className = "text-emerald-400 text-sm";
+            errorBox.classList.remove("hidden");
+            setTimeout(() => errorBox.classList.add("hidden"), 3000);
+        }
+
+        cancelCorrection();
+        loadTransfers();
+    }
+
+    // -----------------------------------------------------------------------
+    // Void
+    // -----------------------------------------------------------------------
+    // --- Void modal helpers ---
+    function openVoidModal(onConfirm) {
+        document.getElementById("void-reason-input").value = "";
+        document.getElementById("void-modal-error").classList.add("hidden");
+        document.getElementById("void-modal-confirm-btn").onclick = onConfirm;
+        document.getElementById("void-modal-backdrop").classList.remove("hidden");
+        setTimeout(() => document.getElementById("void-reason-input").focus(), 50);
+    }
+
+    function closeVoidModal() {
+        document.getElementById("void-modal-backdrop").classList.add("hidden");
+    }
+
+    document.addEventListener("keydown", e => {
+        if (e.key === "Escape") closeVoidModal();
+    });
+
+    async function voidTransfer(id) {
+        openVoidModal(async () => {
+            const reason = document.getElementById("void-reason-input").value.trim();
+            const response = await fetch(`/api/transfers/${id}/void`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ void_reason: reason })
+            });
+            if (response.ok) {
+                closeVoidModal();
+                loadTransfers();
+            } else {
+                const errEl = document.getElementById("void-modal-error");
+                errEl.textContent = "Failed to void transfer.";
+                errEl.classList.remove("hidden");
+            }
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Init
+    // -----------------------------------------------------------------------
+    const today = new Date().toISOString().split("T")[0];
+    document.getElementById("date").value = today;
+
+    attachAmountPreview("amount", "amount-preview");
+    loadAccounts();
+    loadTransfers();
+</script>
+{% endblock %}

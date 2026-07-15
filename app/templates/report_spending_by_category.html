@@ -1,0 +1,259 @@
+{% extends "layout.html" %}
+{% block title %}Finance Tracker{% endblock %}
+
+{% block content %}
+<div class="p-8">
+
+    <h1 class="text-2xl font-semibold mb-6">Spending by Category</h1>
+
+    <div class="bg-gray-900 rounded-xl p-6">
+
+        <!-- Controls row -->
+        <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+
+            <!-- Time period toggles -->
+            <div class="flex rounded-lg overflow-hidden border border-gray-700">
+                <button onclick="setPeriod('all')" id="period-all"
+                    class="px-4 py-1.5 text-sm font-medium transition-colors bg-blue-600 text-white">
+                    All Time
+                </button>
+                <button onclick="setPeriod('12m')" id="period-12m"
+                    class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">
+                    Last 12 Months
+                </button>
+                <button onclick="setPeriod('3m')" id="period-3m"
+                    class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">
+                    Last 3 Months
+                </button>
+            </div>
+
+            <!-- Breadcrumb for drill-down -->
+            <div id="breadcrumb" class="text-sm text-gray-400 hidden">
+                <button onclick="drillUp()" class="text-blue-400 hover:text-blue-300">← All Categories</button>
+                <span id="breadcrumb-label" class="ml-2 text-gray-300"></span>
+            </div>
+
+        </div>
+
+        <!-- Expenditure only / Income toggle -->
+        <div class="flex gap-2 mb-6">
+            <button onclick="setMode('spend')" id="mode-spend"
+                class="px-3 py-1 text-xs font-medium rounded-lg transition-colors bg-red-900 text-red-300 border border-red-800">
+                Expenditure
+            </button>
+            <button onclick="setMode('income')" id="mode-income"
+                class="px-3 py-1 text-xs font-medium rounded-lg transition-colors bg-gray-800 text-gray-500 border border-gray-700">
+                Income
+            </button>
+        </div>
+
+        <div>
+            <canvas id="categoryChart"></canvas>
+        </div>
+
+        <p id="chart-empty" class="text-gray-500 text-sm hidden mt-4">
+            No categorised transactions found for this period.
+        </p>
+
+        <!-- Summary totals -->
+        <div id="summary" class="mt-6 pt-4 border-t border-gray-800 hidden">
+            <div class="flex justify-between text-sm">
+                <span class="text-gray-400" id="summary-label">Total spending</span>
+                <span class="font-mono font-medium" id="summary-total"></span>
+            </div>
+            <p class="text-xs text-gray-600 mt-1" id="summary-sub"></p>
+        </div>
+
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+    let chart = null;
+    let currentPeriod = "all";
+    let currentMode = "spend";     // "spend" or "income"
+    let currentParentId = null;    // null = top-level, number = drilled into a parent
+    let currentParentName = "";
+
+    const COLOURS_SPEND  = ["#f87171","#fb923c","#fbbf24","#a3e635","#34d399",
+                             "#22d3ee","#60a5fa","#a78bfa","#f472b6","#94a3b8"];
+    const COLOURS_INCOME = ["#34d399","#4ade80","#86efac","#22d3ee","#38bdf8",
+                             "#60a5fa","#93c5fd","#6ee7b7","#a7f3d0","#bae6fd"];
+
+    function setPeriod(p) {
+        currentPeriod = p;
+        ["all","12m","3m"].forEach(id => {
+            const btn = document.getElementById(`period-${id}`);
+            btn.className = `px-4 py-1.5 text-sm font-medium transition-colors ${p===id ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400"}`;
+        });
+        load();
+    }
+
+    function setMode(m) {
+        currentMode = m;
+        currentParentId = null;
+        currentParentName = "";
+        document.getElementById("breadcrumb").classList.add("hidden");
+
+        const spendBtn  = document.getElementById("mode-spend");
+        const incomeBtn = document.getElementById("mode-income");
+
+        if (m === "spend") {
+            spendBtn.className  = "px-3 py-1 text-xs font-medium rounded-lg transition-colors bg-red-900 text-red-300 border border-red-800";
+            incomeBtn.className = "px-3 py-1 text-xs font-medium rounded-lg transition-colors bg-gray-800 text-gray-500 border border-gray-700";
+        } else {
+            incomeBtn.className = "px-3 py-1 text-xs font-medium rounded-lg transition-colors bg-emerald-900 text-emerald-300 border border-emerald-800";
+            spendBtn.className  = "px-3 py-1 text-xs font-medium rounded-lg transition-colors bg-gray-800 text-gray-500 border border-gray-700";
+        }
+        load();
+    }
+
+    function drillUp() {
+        currentParentId = null;
+        currentParentName = "";
+        document.getElementById("breadcrumb").classList.add("hidden");
+        load();
+    }
+
+    function drillInto(parentId, parentName) {
+        currentParentId = parentId;
+        currentParentName = parentName;
+        document.getElementById("breadcrumb").classList.remove("hidden");
+        document.getElementById("breadcrumb-label").textContent = parentName;
+        load();
+    }
+
+    async function load() {
+        const params = new URLSearchParams({
+            period: currentPeriod,
+            mode:   currentMode,
+            parent_id: currentParentId ?? ""
+        });
+
+        const response = await fetch(`/api/reports/spending-by-category?${params}`);
+        const data = await response.json();
+
+        // Auto-drill: if we're at the top level and there's only
+        // one category with children, skip straight to its subcategories.
+        // This avoids the "one bar" problem. Works for both income 
+        // and early-month spending.
+        if (
+            currentParentId === null &&
+            data.categories &&
+            data.categories.length === 1 &&
+            data.categories[0].has_children
+        ) {
+            drillInto(data.categories[0].id, data.categories[0].name);
+            return;  // drillInto calls load() again with the parent set
+        }
+
+        const emptyEl   = document.getElementById("chart-empty");
+        const summaryEl = document.getElementById("summary");
+        const canvas    = document.getElementById("categoryChart");
+
+        if (!data.categories || data.categories.length === 0) {
+            emptyEl.classList.remove("hidden");
+            summaryEl.classList.add("hidden");
+            canvas.classList.add("hidden");
+            if (chart) { chart.destroy(); chart = null; }
+            return;
+        }
+
+        emptyEl.classList.add("hidden");
+        canvas.classList.remove("hidden");
+
+        const colours = currentMode === "spend" ? COLOURS_SPEND : COLOURS_INCOME;
+        const labels  = data.categories.map(c => c.name);
+        const values  = data.categories.map(c => c.amount);
+        const bgColours = data.categories.map((_, i) => colours[i % colours.length] + "cc");
+        const borderColours = data.categories.map((_, i) => colours[i % colours.length]);
+
+        // Dynamic height — 40px per bar, min 200
+        const height = Math.max(200, data.categories.length * 48);
+        canvas.style.height = height + "px";
+
+        if (chart) chart.destroy();
+
+        chart = new Chart(canvas.getContext("2d"), {
+            type: "bar",
+            data: {
+                labels,
+                datasets: [{
+                    data: values,
+                    backgroundColor: bgColours,
+                    borderColor: borderColours,
+                    borderWidth: 1,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                indexAxis: "y",   // horizontal bars
+                responsive: true,
+                maintainAspectRatio: false,
+                onClick: (evt, elements) => {
+                    // Drill into a top-level category if clicked and not already drilled
+                    if (elements.length > 0 && currentParentId === null) {
+                        const idx = elements[0].index;
+                        const cat = data.categories[idx];
+                        if (cat.has_children) {
+                            drillInto(cat.id, cat.name);
+                        }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: "#1f2937",
+                        titleColor: "#f3f4f6",
+                        bodyColor: "#d1d5db",
+                        borderColor: "#374151",
+                        borderWidth: 1,
+                        callbacks: {
+                            label: ctx => {
+                                const val = ctx.parsed.x;
+                                const pct = data.total > 0 ? ((val / data.total) * 100).toFixed(1) : 0;
+                                const suffix = ctx.chart.data.labels[ctx.dataIndex] &&
+                                    data.categories[ctx.dataIndex]?.has_children &&
+                                    currentParentId === null
+                                    ? " (click to drill down)" : "";
+                                return ` £${val.toLocaleString("en-GB", {minimumFractionDigits:2})} — ${pct}%${suffix}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: "rgba(255,255,255,0.05)" },
+                        ticks: {
+                            color: "#6b7280",
+                            font: { size: 11 },
+                            callback: v => "£" + v.toLocaleString("en-GB")
+                        }
+                    },
+                    y: {
+                        grid: { color: "rgba(255,255,255,0.03)" },
+                        ticks: { color: "#d1d5db", font: { size: 12 } }
+                    }
+                }
+            }
+        });
+
+        // Update summary
+        const modeLabel = currentMode === "spend" ? "Total spending" : "Total income";
+        const subLabel  = currentParentId
+            ? `Subcategories of ${currentParentName}`
+            : `Across ${data.categories.length} ${currentMode === "spend" ? "spending" : "income"} categor${data.categories.length === 1 ? "y" : "ies"}`;
+
+        document.getElementById("summary-label").textContent = modeLabel;
+        document.getElementById("summary-total").textContent =
+            `£${data.total.toLocaleString("en-GB", {minimumFractionDigits:2})}`;
+        document.getElementById("summary-total").className =
+            `font-mono font-medium ${currentMode === "spend" ? "text-red-400" : "text-emerald-400"}`;
+        document.getElementById("summary-sub").textContent = subLabel;
+        summaryEl.classList.remove("hidden");
+    }
+
+    load();
+</script>
+{% endblock %}

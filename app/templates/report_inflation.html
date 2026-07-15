@@ -1,0 +1,459 @@
+{% extends "layout.html" %}
+{% block title %}Personal Inflation — Finance Tracker{% endblock %}
+
+{% block content %}
+<div class="p-8">
+
+    <h1 class="text-2xl font-semibold mb-6">Personal Inflation</h1>
+
+    <!-- Controls card -->
+    <div class="bg-gray-900 rounded-xl p-6 mb-6">
+        <div class="flex items-center justify-between flex-wrap gap-3">
+
+            <!-- Left: mode picker -->
+            <div class="flex rounded-lg overflow-hidden border border-gray-700">
+                <button onclick="setMode('3m')"  id="btn-3m"
+                    class="px-4 py-1.5 text-sm font-medium transition-colors bg-blue-600 text-white">3 Months</button>
+                <button onclick="setMode('6m')"  id="btn-6m"
+                    class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">6 Months</button>
+                <button onclick="setMode('12m')" id="btn-12m"
+                    class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">12 Months</button>
+                <button onclick="setMode('yoy')" id="btn-yoy"
+                    class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">Year on Year</button>
+            </div>
+
+            <!-- Right: YoY year range — only visible in YoY mode -->
+            <div id="yoy-controls" class="hidden flex items-center gap-3 flex-wrap">
+                <div class="flex items-center gap-2">
+                    <label class="text-sm text-gray-400">From</label>
+                    <select id="yoy-from" onchange="load()"
+                        class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-gray-100 text-sm focus:outline-none focus:border-blue-500">
+                    </select>
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="text-sm text-gray-400">To</label>
+                    <select id="yoy-to" onchange="load()"
+                        class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-gray-100 text-sm focus:outline-none focus:border-blue-500">
+                    </select>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Summary card — period mode only -->
+    <div id="summary-card" class="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6 hidden">
+        <div class="flex items-center justify-between flex-wrap gap-4">
+            <div>
+                <p class="text-sm text-gray-400 mb-1">Overall personal inflation rate</p>
+                <div class="flex items-end gap-3">
+                    <p id="overall-pct" class="text-3xl font-semibold font-mono">—</p>
+                    <p id="overall-label" class="text-sm text-gray-500 mb-1"></p>
+                </div>
+            </div>
+            <div class="text-right">
+                <p class="text-sm text-gray-400 mb-1">Average monthly spend</p>
+                <div class="flex gap-6">
+                    <div>
+                        <p id="earlier-total" class="text-xl font-mono font-medium text-gray-300">—</p>
+                        <p id="earlier-label" class="text-xs text-gray-600 mt-0.5">earlier period</p>
+                    </div>
+                    <div>
+                        <p id="later-total" class="text-xl font-mono font-medium text-gray-300">—</p>
+                        <p id="later-label" class="text-xs text-gray-600 mt-0.5">recent period</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <p id="period-description" class="text-xs text-gray-600 mt-3"></p>
+    </div>
+
+    <!-- Insufficient data notice -->
+    <div id="insufficient-notice" class="hidden bg-gray-900 border border-gray-800 rounded-xl p-6 text-center">
+        <p class="text-gray-400 font-medium mb-1">Not enough data yet</p>
+        <p id="insufficient-detail" class="text-sm text-gray-600"></p>
+    </div>
+
+    <!-- Period mode bar chart -->
+    <div id="period-chart-container" class="hidden bg-gray-900 border border-gray-800 rounded-xl p-6 mb-6">
+        <canvas id="period-chart"></canvas>
+    </div>
+
+    <!-- YoY mode line chart -->
+    <div id="yoy-chart-container" class="hidden bg-gray-900 border border-gray-800 rounded-xl p-6 mb-6">
+        <canvas id="yoy-chart"></canvas>
+    </div>
+
+    <!-- Table -->
+    <div id="table-wrapper" class="hidden overflow-x-auto">
+        <div class="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+            <table id="inflation-table" class="text-sm" style="min-width: 100%;">
+                <thead>
+                    <tr id="table-head" class="border-b border-gray-800 text-gray-500"></tr>
+                </thead>
+                <tbody id="inflation-tbody" class="divide-y divide-gray-800"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <p class="text-xs text-gray-600 mt-4">Figures show average monthly spend per period. Transfers and uncategorised transactions excluded.</p>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<script>
+    let currentMode     = "3m";
+    let availableYears  = [];
+    let periodChartInst = null;
+    let yoyChartInst    = null;
+
+    const LINE_COLOURS = [
+        "#60a5fa","#34d399","#f59e0b","#f87171",
+        "#c084fc","#fb923c","#4ade80","#38bdf8",
+        "#a78bfa","#f472b6","#94a3b8","#fbbf24",
+        "#86efac","#fdba74","#67e8f9","#d8b4fe"
+    ];
+
+    // -----------------------------------------------------------------------
+    // Mode switching
+    // -----------------------------------------------------------------------
+
+    function setMode(mode) {
+        currentMode = mode;
+        ["3m","6m","12m","yoy"].forEach(m => {
+            document.getElementById(`btn-${m}`).className =
+                `px-4 py-1.5 text-sm font-medium transition-colors ${m === mode ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400"}`;
+        });
+        document.getElementById("yoy-controls").classList.toggle("hidden", mode !== "yoy");
+        load();
+    }
+
+    // -----------------------------------------------------------------------
+    // Populate year dropdowns
+    // -----------------------------------------------------------------------
+
+    async function loadAvailableYears() {
+        const res  = await fetch("/api/reports/inflation-years");
+        const data = await res.json();
+        availableYears = data.years;
+
+        const fromSel = document.getElementById("yoy-from");
+        const toSel   = document.getElementById("yoy-to");
+        fromSel.innerHTML = "";
+        toSel.innerHTML   = "";
+
+        availableYears.forEach(y => {
+            fromSel.innerHTML += `<option value="${y}">${y}</option>`;
+            toSel.innerHTML   += `<option value="${y}">${y}</option>`;
+        });
+
+        if (availableYears.length >= 2) {
+            fromSel.value = availableYears[0];
+            toSel.value   = availableYears[availableYears.length - 1];
+        } else if (availableYears.length === 1) {
+            fromSel.value = availableYears[0];
+            toSel.value   = availableYears[0];
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Main load
+    // -----------------------------------------------------------------------
+
+    async function load() {
+        ["summary-card","insufficient-notice","period-chart-container",
+         "yoy-chart-container","table-wrapper"].forEach(id => {
+            document.getElementById(id).classList.add("hidden");
+        });
+        document.getElementById("period-description").textContent = "";
+
+        if (periodChartInst) { periodChartInst.destroy(); periodChartInst = null; }
+        if (yoyChartInst)    { yoyChartInst.destroy();    yoyChartInst    = null; }
+
+        if (currentMode === "yoy") {
+            await loadYoY();
+        } else {
+            await loadPeriod();
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Period mode
+    // -----------------------------------------------------------------------
+
+    async function loadPeriod() {
+        const res  = await fetch(`/api/reports/inflation?period=${currentMode}`);
+        const data = await res.json();
+
+        if (data.insufficient) {
+            document.getElementById("insufficient-notice").classList.remove("hidden");
+            document.getElementById("insufficient-detail").textContent = data.message;
+            return;
+        }
+
+        // Summary card
+        document.getElementById("summary-card").classList.remove("hidden");
+        const overallPct = data.overall_change_pct;
+        const overallEl  = document.getElementById("overall-pct");
+        overallEl.textContent = `${overallPct > 0 ? "+" : ""}${overallPct.toFixed(2)}%`;
+        overallEl.className   = `text-3xl font-semibold font-mono ${overallPct > 0 ? "text-red-400" : overallPct < 0 ? "text-emerald-400" : "text-gray-300"}`;
+        document.getElementById("overall-label").textContent =
+            overallPct > 0 ? "spending has increased" : overallPct < 0 ? "spending has decreased" : "no change";
+        document.getElementById("earlier-total").textContent = fmtGbp(data.earlier_total_avg);
+        document.getElementById("later-total").textContent   = fmtGbp(data.later_total_avg);
+        document.getElementById("earlier-label").textContent = data.earlier_label + " avg/mo";
+        document.getElementById("later-label").textContent   = data.later_label   + " avg/mo";
+        document.getElementById("period-description").textContent =
+            `${data.earlier_label}  →  ${data.later_label}`;
+
+        if (data.categories.length === 0) {
+            buildPeriodTable(data, []);
+            return;
+        }
+
+        // Bar chart
+        document.getElementById("period-chart-container").classList.remove("hidden");
+
+        const chartCats  = data.categories.filter(c => c.change_pct !== null);
+        const sorted     = [...chartCats].sort((a, b) => b.change_pct - a.change_pct);
+        const labels     = sorted.map(c => c.name);
+        const values     = sorted.map(c => c.change_pct);
+        const bgColours  = values.map(v => v > 0 ? "rgba(248,113,113,0.7)" : "rgba(52,211,153,0.7)");
+        const brdColours = values.map(v => v > 0 ? "#f87171" : "#34d399");
+
+        periodChartInst = new Chart(document.getElementById("period-chart").getContext("2d"), {
+            type: "bar",
+            data: {
+                labels,
+                datasets: [{
+                    label:           "% change",
+                    data:            values,
+                    backgroundColor: bgColours,
+                    borderColor:     brdColours,
+                    borderWidth:     1,
+                    borderRadius:    4
+                }]
+            },
+            options: {
+                indexAxis: "y",
+                responsive: true,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: "#1f2937",
+                        titleColor:      "#f3f4f6",
+                        bodyColor:       "#d1d5db",
+                        borderColor:     "#374151",
+                        borderWidth:     1,
+                        callbacks: {
+                            label: ctx => {
+                                const v = ctx.parsed.x;
+                                return ` ${v > 0 ? "+" : ""}${v.toFixed(2)}%`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid:   { color: "#374151" },
+                        ticks:  { color: "#9ca3af", callback: v => `${v > 0 ? "+" : ""}${v}%` },
+                        border: { color: "#374151" }
+                    },
+                    y: {
+                        grid:   { display: false },
+                        ticks:  { color: "#d1d5db" },
+                        border: { color: "#374151" }
+                    }
+                }
+            }
+        });
+
+        buildPeriodTable(data, data.categories);
+    }
+
+    function buildPeriodTable(data, categories) {
+        document.getElementById("table-wrapper").classList.remove("hidden");
+        document.getElementById("table-head").innerHTML = `
+            <th class="text-left px-6 py-3 font-medium">Category</th>
+            <th class="text-right px-4 py-3 font-medium">${data.earlier_label}</th>
+            <th class="text-right px-4 py-3 font-medium">${data.later_label}</th>
+            <th class="text-right px-6 py-3 font-medium">Change</th>
+        `;
+
+        const tbody = document.getElementById("inflation-tbody");
+        if (categories.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" class="px-6 py-6 text-center text-gray-600">No categorised spending found.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = categories.map(cat => {
+            const hasEarlier = cat.earlier_avg > 0;
+            const hasLater   = cat.later_avg   > 0;
+            const earlierStr = hasEarlier ? fmtGbp(cat.earlier_avg) : `<span class="text-gray-600">—</span>`;
+            const laterStr   = hasLater   ? fmtGbp(cat.later_avg)   : `<span class="text-gray-600">—</span>`;
+            return `
+                <tr class="hover:bg-gray-800 transition-colors">
+                    <td class="px-6 py-3 font-medium text-gray-200">${cat.name}</td>
+                    <td class="px-4 py-3 text-right text-gray-400 font-mono">${earlierStr}</td>
+                    <td class="px-4 py-3 text-right text-gray-400 font-mono">${laterStr}</td>
+                    <td class="px-6 py-3 text-right">${buildChangeCell(hasEarlier, hasLater, cat.change_pct)}</td>
+                </tr>
+            `;
+        }).join("");
+    }
+
+    // -----------------------------------------------------------------------
+    // Year on Year mode
+    // -----------------------------------------------------------------------
+
+    async function loadYoY() {
+        const fromYear = parseInt(document.getElementById("yoy-from").value);
+        const toYear   = parseInt(document.getElementById("yoy-to").value);
+        if (!fromYear || !toYear) return;
+
+        const yearFrom = Math.min(fromYear, toYear);
+        const yearTo   = Math.max(fromYear, toYear);
+
+        const res  = await fetch(`/api/reports/inflation-yoy?from=${yearFrom}&to=${yearTo}`);
+        const data = await res.json();
+
+        if (data.insufficient) {
+            document.getElementById("insufficient-notice").classList.remove("hidden");
+            document.getElementById("insufficient-detail").textContent = data.message;
+            return;
+        }
+
+        const years = data.years;
+
+        // Line chart
+        document.getElementById("yoy-chart-container").classList.remove("hidden");
+
+        const datasets = data.categories.map((cat, i) => ({
+            label:            cat.name,
+            data:             cat.yearly_avgs,
+            borderColor:      LINE_COLOURS[i % LINE_COLOURS.length],
+            backgroundColor:  LINE_COLOURS[i % LINE_COLOURS.length] + "22",
+            borderWidth:      2,
+            pointRadius:      4,
+            pointHoverRadius: 6,
+            tension:          0.3,
+            fill:             false
+        }));
+
+        yoyChartInst = new Chart(document.getElementById("yoy-chart").getContext("2d"), {
+            type: "line",
+            data: { labels: years.map(String), datasets },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display:  true,
+                        position: "bottom",
+                        labels:   { color: "#9ca3af", boxWidth: 12, padding: 16, font: { size: 12 } },
+                        onClick(e, legendItem, legend) {
+                            const meta = legend.chart.getDatasetMeta(legendItem.datasetIndex);
+                            meta.hidden = !meta.hidden;
+                            legend.chart.update();
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: "#1f2937",
+                        titleColor:      "#f3f4f6",
+                        bodyColor:       "#d1d5db",
+                        borderColor:     "#374151",
+                        borderWidth:     1,
+                        callbacks: {
+                            label: ctx => {
+                                const v = ctx.parsed.y;
+                                return ` ${ctx.dataset.label}: ${v > 0 ? fmtGbp(v) + "/mo" : "—"}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid:   { color: "#374151" },
+                        ticks:  { color: "#9ca3af" },
+                        border: { color: "#374151" }
+                    },
+                    y: {
+                        grid:   { color: "#374151" },
+                        ticks:  { color: "#9ca3af", callback: v => "£" + v.toLocaleString("en-GB") },
+                        border: { color: "#374151" }
+                    }
+                }
+            }
+        });
+
+        // Table
+        document.getElementById("table-wrapper").classList.remove("hidden");
+        let headHtml = `<th class="text-left px-6 py-3 font-medium whitespace-nowrap">Category</th>`;
+        years.forEach((yr, i) => {
+            headHtml += `<th class="text-right px-4 py-3 font-medium whitespace-nowrap">${yr}</th>`;
+            if (i < years.length - 1) {
+                headHtml += `<th class="text-right px-4 py-3 font-medium whitespace-nowrap text-gray-600">${yr}→${years[i+1]}</th>`;
+            }
+        });
+        document.getElementById("table-head").innerHTML = headHtml;
+
+        const tbody = document.getElementById("inflation-tbody");
+        if (data.categories.length === 0) {
+            const colspan = 1 + years.length + (years.length - 1);
+            tbody.innerHTML = `<tr><td colspan="${colspan}" class="px-6 py-6 text-center text-gray-600">No categorised spending found.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = data.categories.map(cat => {
+            let rowHtml = `<td class="px-6 py-3 font-medium text-gray-200 whitespace-nowrap">${cat.name}</td>`;
+            cat.yearly_avgs.forEach((avg, i) => {
+                const avgStr = avg > 0 ? fmtGbp(avg) : `<span class="text-gray-600">—</span>`;
+                rowHtml += `<td class="px-4 py-3 text-right text-gray-400 font-mono whitespace-nowrap">${avgStr}</td>`;
+                if (i < cat.yearly_avgs.length - 1) {
+                    rowHtml += `<td class="px-4 py-3 text-right whitespace-nowrap">${buildChangeCell(cat.yearly_avgs[i] > 0, cat.yearly_avgs[i+1] > 0, cat.changes[i])}</td>`;
+                }
+            });
+            return `<tr class="hover:bg-gray-800 transition-colors">${rowHtml}</tr>`;
+        }).join("");
+
+        // Totals row
+        let totalsHtml = `<td class="px-6 py-3 font-semibold text-gray-300 whitespace-nowrap">Total</td>`;
+        data.totals.forEach((total, i) => {
+            totalsHtml += `<td class="px-4 py-3 text-right font-mono font-semibold text-gray-300 whitespace-nowrap">${fmtGbp(total)}</td>`;
+            if (i < data.totals.length - 1) {
+                totalsHtml += `<td class="px-4 py-3 text-right whitespace-nowrap">${buildChangeCell(data.totals[i] > 0, data.totals[i+1] > 0, data.total_changes[i])}</td>`;
+            }
+        });
+        tbody.innerHTML += `<tr class="border-t-2 border-gray-700 bg-gray-800">${totalsHtml}</tr>`;
+    }
+
+    // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+
+    function fmtGbp(val) {
+        return "£" + val.toLocaleString("en-GB", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+
+    function buildChangeCell(hasEarlier, hasLater, pct) {
+        if (!hasEarlier && hasLater)  return `<span class="text-amber-400 font-mono text-xs">New</span>`;
+        if (hasEarlier  && !hasLater) return `<span class="text-gray-500 font-mono text-xs">Gone</span>`;
+        if (pct === null || pct === undefined) return `<span class="text-gray-600">—</span>`;
+        const s     = pct > 0 ? "+" : "";
+        const cls   = pct > 0 ? "text-red-400" : pct < 0 ? "text-emerald-400" : "text-gray-400";
+        const arrow = pct > 0 ? "↑" : pct < 0 ? "↓" : "→";
+        return `<span class="${cls} font-mono font-medium">${arrow} ${s}${pct.toFixed(2)}%</span>`;
+    }
+
+    // -----------------------------------------------------------------------
+    // Init
+    // -----------------------------------------------------------------------
+
+    async function init() {
+        await loadAvailableYears();
+        load();
+    }
+
+    init();
+</script>
+{% endblock %}

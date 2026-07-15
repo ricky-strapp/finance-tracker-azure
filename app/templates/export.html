@@ -1,0 +1,93 @@
+{% extends "layout.html" %}
+{% block title %}Export — Finance Tracker{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto p-8">
+
+    <h1 class="text-2xl font-semibold mb-2">Export Data</h1>
+    <p class="text-sm text-gray-500 mb-8">Downloads all transactions and transfers. Voided entries are included and flagged.</p>
+
+    <!-- Export buttons -->
+    <div class="bg-gray-900 rounded-xl p-6 mb-8">
+        <h2 class="text-lg font-medium mb-4">Download</h2>
+
+        <div class="flex gap-4">
+            <button onclick="doExport('csv')"
+                class="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg px-5 py-2.5 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                </svg>
+                Export CSV
+            </button>
+            <button onclick="doExport('json')"
+                class="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg px-5 py-2.5 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                </svg>
+                Export JSON
+            </button>
+        </div>
+
+        <p class="text-xs text-gray-600 mt-4">CSV is best for opening in Excel or Google Sheets. JSON preserves all data types and is best for archiving or importing into other tools.</p>
+    </div>
+
+    <!-- Export history -->
+    <div class="bg-gray-900 rounded-xl p-6">
+        <h2 class="text-lg font-medium mb-4">Export History</h2>
+
+        <div id="history-list">
+            <p class="text-sm text-gray-500">Loading...</p>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    async function doExport(format) {
+        // Trigger the download by navigating to the API endpoint.
+        // The browser handles the file download prompt automatically.
+        window.location.href = `/api/export?format=${format}`;
+
+        // Wait a moment then refresh the history list
+        setTimeout(loadHistory, 1500);
+    }
+
+    async function loadHistory() {
+        const response = await fetch("/api/export/history");
+        const history  = await response.json();
+        const container = document.getElementById("history-list");
+
+        if (history.length === 0) {
+            container.innerHTML = '<p class="text-sm text-gray-500">No exports yet.</p>';
+            return;
+        }
+
+        container.innerHTML = `
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-gray-500 border-b border-gray-800">
+                        <th class="text-left py-2 pr-4 font-medium">Date</th>
+                        <th class="text-left py-2 px-4 font-medium">Format</th>
+                        <th class="text-right py-2 pl-4 font-medium">Rows</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-800">
+                    ${history.map(h => `
+                        <tr class="text-gray-300">
+                            <td class="py-2.5 pr-4">${formatTimestamp(h.created_at)}</td>
+                            <td class="py-2.5 px-4">
+                                <span class="text-xs font-medium uppercase px-2 py-0.5 rounded-full ${h.format === 'csv' ? 'bg-blue-900 text-blue-300' : 'bg-gray-700 text-gray-300'}">
+                                    ${h.format}
+                                </span>
+                            </td>
+                            <td class="py-2.5 pl-4 text-right font-mono text-gray-400">${h.row_count.toLocaleString()}</td>
+                        </tr>
+                    `).join("")}
+                </tbody>
+            </table>
+        `;
+    }
+
+    loadHistory();
+</script>
+{% endblock %}

@@ -1,0 +1,295 @@
+{% extends "layout.html" %}
+{% block title %}Finance Tracker{% endblock %}
+
+{% block content %}
+<div class="p-8">
+
+    <h1 class="text-2xl font-semibold mb-6">Net Worth Over Time</h1>
+
+    <div class="bg-gray-900 rounded-xl p-6">
+
+        <!-- Controls row -->
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+
+            <!-- Left: timeframe + granularity -->
+            <div class="flex items-center gap-3 flex-wrap">
+
+                <!-- Timeframe -->
+                <div class="flex rounded-lg overflow-hidden border border-gray-700">
+                    <button onclick="setPeriod('all')" id="period-all"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-blue-600 text-white">All Time</button>
+                    <button onclick="setPeriod('12m')" id="period-12m"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">12 Months</button>
+                    <button onclick="setPeriod('6m')" id="period-6m"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">6 Months</button>
+                    <button onclick="setPeriod('3m')" id="period-3m"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">3 Months</button>
+                    <button onclick="setPeriod('1m')" id="period-1m"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">This Month</button>
+                </div>
+
+                <!-- Granularity -->
+                <div class="flex rounded-lg overflow-hidden border border-gray-700">
+                    <button onclick="setGranularity('month')" id="gran-month"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-blue-600 text-white">Monthly</button>
+                    <button onclick="setGranularity('week')" id="gran-week"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">Weekly</button>
+                    <button onclick="setGranularity('day')" id="gran-day"
+                        class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">Daily</button>
+                </div>
+
+            </div>
+
+            <!-- Right: Line / Bar -->
+            <div class="flex rounded-lg overflow-hidden border border-gray-700">
+                <button id="nw-btn-line" onclick="setChartType('line')"
+                    class="px-4 py-1.5 text-sm font-medium transition-colors bg-blue-600 text-white">Line</button>
+                <button id="nw-btn-bar" onclick="setChartType('bar')"
+                    class="px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400">Bar</button>
+            </div>
+
+        </div>
+
+        <div class="mb-4">
+            <canvas id="netWorthChart" height="100"></canvas>
+        </div>
+
+        <div id="account-toggles" class="flex flex-wrap gap-2 mt-4"></div>
+        <p id="nw-empty" class="text-gray-500 text-sm hidden">No data yet. Add some transactions or valuations to see your net worth over time.</p>
+
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+    let chart       = null;
+    let chartType   = "line";
+    let chartData   = null;
+    let showTotal   = true;
+    let accountVisibility = {};
+    let currentPeriod      = "all";
+    let currentGranularity = "month";
+
+    const ACCOUNT_COLOURS = [
+        "#60a5fa","#34d399","#f59e0b","#f87171",
+        "#c084fc","#fb923c","#4ade80","#38bdf8",
+        "#a78bfa","#f472b6"
+    ];
+
+    // --- Allowed granularities per period ---
+    // To unlock a combination in future, just add it to the array.
+    const ALLOWED_GRAN = {
+        "all": ["month", "week"],           // day disabled for all-time (too many points)
+        "12m": ["month", "week"],           // day disabled for 12m (365 points)
+        "6m":  ["month", "week", "day"],
+        "3m":  ["month", "week", "day"],
+        "1m":  ["week", "day"],             // month disabled for 1 month (only ~1 point)
+    };
+
+    function setPeriod(p) {
+        currentPeriod = p;
+        ["all","12m","6m","3m","1m"].forEach(id => {
+            document.getElementById(`period-${id}`).className =
+                `px-4 py-1.5 text-sm font-medium transition-colors ${p === id ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400"}`;
+        });
+        // If current granularity not valid for new period, fall back to finest allowed
+        const allowed = ALLOWED_GRAN[p];
+        if (!allowed.includes(currentGranularity)) {
+            currentGranularity = allowed[allowed.length - 1];
+        }
+        updateGranularityButtons();
+        load();
+    }
+
+    function setGranularity(g) {
+        if (!ALLOWED_GRAN[currentPeriod].includes(g)) return; // disabled — do nothing
+        currentGranularity = g;
+        updateGranularityButtons();
+        load();
+    }
+
+    function updateGranularityButtons() {
+        const allowed = ALLOWED_GRAN[currentPeriod];
+        ["month","week","day"].forEach(g => {
+            const btn = document.getElementById(`gran-${g}`);
+            const isActive   = g === currentGranularity;
+            const isDisabled = !allowed.includes(g);
+            if (isDisabled) {
+                btn.className = "px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-600 cursor-not-allowed";
+            } else if (isActive) {
+                btn.className = "px-4 py-1.5 text-sm font-medium transition-colors bg-blue-600 text-white";
+            } else {
+                btn.className = "px-4 py-1.5 text-sm font-medium transition-colors bg-gray-800 text-gray-400";
+            }
+        });
+    }
+
+    function setChartType(type) {
+        chartType = type;
+        document.getElementById("nw-btn-line").className =
+            `px-4 py-1.5 text-sm font-medium transition-colors ${type === "line" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400"}`;
+        document.getElementById("nw-btn-bar").className =
+            `px-4 py-1.5 text-sm font-medium transition-colors ${type === "bar" ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-400"}`;
+        if (chartData) renderChart();
+    }
+
+    function toggleTotal() {
+        showTotal = !showTotal;
+        const btn = document.getElementById("toggle-total");
+        btn.classList.toggle("opacity-40", !showTotal);
+        renderChart();
+    }
+
+    function toggleAccount(accountId) {
+        accountVisibility[accountId] = !accountVisibility[accountId];
+        document.getElementById(`toggle-${accountId}`).classList.toggle("opacity-40", !accountVisibility[accountId]);
+        renderChart();
+    }
+
+    function toggleAllAccounts() {
+        const allVisible = chartData.accounts.every(a => accountVisibility[a.id]);
+        chartData.accounts.forEach(a => {
+            accountVisibility[a.id] = !allVisible;
+            const btn = document.getElementById(`toggle-${a.id}`);
+            if (btn) btn.classList.toggle("opacity-40", allVisible);
+        });
+        document.getElementById("all-label").textContent =
+            allVisible ? "Show all accounts" : "Hide all accounts";
+        renderChart();
+    }
+
+    function renderChart() {
+        const ctx = document.getElementById("netWorthChart").getContext("2d");
+        if (chart) chart.destroy();
+
+        const datasets = [];
+
+        if (showTotal) {
+            datasets.push({
+                label:           "Total Net Worth",
+                data:            chartData.total,
+                borderColor:     "#ffffff",
+                backgroundColor: chartType === "bar" ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.05)",
+                borderWidth:     chartType === "line" ? 2.5 : 1,
+                pointRadius:     chartType === "line" ? (chartData.labels.length > 90 ? 0 : 3) : 0,
+                pointHoverRadius: 5,
+                tension:         0.3,
+                fill:            chartType === "line",
+                borderRadius:    chartType === "bar" ? 3 : 0,
+                order:           0
+            });
+        }
+
+        chartData.accounts.forEach((account, i) => {
+            if (!accountVisibility[account.id]) return;
+            const colour = ACCOUNT_COLOURS[i % ACCOUNT_COLOURS.length];
+            datasets.push({
+                label:           account.name,
+                data:            account.values,
+                borderColor:     colour,
+                backgroundColor: chartType === "bar" ? colour + "99" : colour + "11",
+                borderWidth:     chartType === "line" ? 1.5 : 1,
+                pointRadius:     chartType === "line" ? (chartData.labels.length > 90 ? 0 : 2) : 0,
+                pointHoverRadius: 4,
+                tension:         0.3,
+                fill:            false,
+                borderRadius:    chartType === "bar" ? 3 : 0,
+                order:           i + 1
+            });
+        });
+
+        chart = new Chart(ctx, {
+            type: chartType,
+            data: { labels: chartData.labels, datasets },
+            options: {
+                responsive: true,
+                interaction: { mode: "index", intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: "#1f2937",
+                        titleColor:      "#f3f4f6",
+                        bodyColor:       "#d1d5db",
+                        borderColor:     "#374151",
+                        borderWidth:     1,
+                        callbacks: {
+                            label: ctx => ` ${ctx.dataset.label}: £${ctx.parsed.y.toLocaleString("en-GB", {minimumFractionDigits:2})}`
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid:  { color: "rgba(255,255,255,0.05)" },
+                        ticks: { color: "#6b7280", font: { size: 11 },
+                            // Thin out x labels when there are many points
+                            maxTicksLimit: 24
+                        }
+                    },
+                    y: {
+                        beginAtZero: false,
+                        grid:  { color: "rgba(255,255,255,0.05)" },
+                        ticks: { color: "#6b7280", font: { size: 11 },
+                            callback: v => "£" + v.toLocaleString("en-GB") }
+                    }
+                }
+            }
+        });
+    }
+
+    async function load() {
+        const response = await fetch(`/api/reports/net-worth-history-v2?period=${currentPeriod}&granularity=${currentGranularity}`);
+        chartData = await response.json();
+
+        if (!chartData.labels || chartData.labels.length === 0) {
+            document.getElementById("nw-empty").classList.remove("hidden");
+            document.getElementById("netWorthChart").classList.add("hidden");
+            return;
+        }
+
+        document.getElementById("nw-empty").classList.add("hidden");
+        document.getElementById("netWorthChart").classList.remove("hidden");
+
+        // Preserve existing visibility state across reloads; initialise new accounts to hidden
+        chartData.accounts.forEach(a => {
+            if (!(a.id in accountVisibility)) accountVisibility[a.id] = false;
+        });
+
+        // Build toggles only on first load (they don't change between reloads)
+        if (!document.getElementById("toggle-total")) {
+            const accountButtons = chartData.accounts.map((account, i) => {
+                const colour = ACCOUNT_COLOURS[i % ACCOUNT_COLOURS.length];
+                return `
+                    <button id="toggle-${account.id}" onclick="toggleAccount(${account.id})"
+                        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-colors opacity-40"
+                        style="border-color:${colour}; color:${colour};">
+                        <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${colour}"></span>
+                        ${account.name}
+                    </button>`;
+            }).join("");
+
+            document.getElementById("account-toggles").innerHTML = `
+                <div class="flex flex-wrap gap-2">
+                    <button id="toggle-total" onclick="toggleTotal()"
+                        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-colors"
+                        style="border-color:#ffffff; color:#ffffff;">
+                        <span class="w-2.5 h-2.5 rounded-full flex-shrink-0 bg-white"></span>
+                        Total Net Worth
+                    </button>
+                    ${accountButtons}
+                </div>
+                <div class="flex justify-end mt-3">
+                    <button id="toggle-all-btn" onclick="toggleAllAccounts()"
+                        class="px-4 py-1.5 text-sm font-medium text-gray-400 hover:text-white transition-colors">
+                        <span id="all-label">Show all accounts</span>
+                    </button>
+                </div>
+            `;
+        }
+
+        renderChart();
+    }
+
+    load();
+</script>
+{% endblock %}
