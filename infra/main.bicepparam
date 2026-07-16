@@ -74,3 +74,7 @@ param requiredAppServices = [
     managedEnvironmentName: 'me-fintrack-demo-${location}'
   }
 ]
+
+param storageName = 'fintrackstorage01'
+param storageRG = 'rg-fintrack-personal-${location}'
+param fileShareName = 'fintrack-db-share'
