@@ -8,6 +8,9 @@ param containerRegistryRG string
 param requiredLogAnalyticsWorkspaces array
 param requiredManagedEnvironments array
 param requiredAppServices array
+param storageName string
+param storageRG string
+param fileShareName string
 
 module resourceGroups './modules/resourceGroups.bicep' = [for item in rgDetails: {
   name:'${item.rgName}-deployment'
@@ -111,4 +114,12 @@ module containerApps './modules/containerApp.bicep' = [for item in requiredAppSe
   ]
 }]
 
-
+module storageAccount './modules/storage.bicep' = {
+  name: '${storageName}-deployment'
+  scope: resourceGroup(storageRG)
+  params:{
+    storageName: storageName
+    location: location
+    fileShareName: fileShareName
+  }
+}
