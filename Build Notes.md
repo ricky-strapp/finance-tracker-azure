@@ -1,5 +1,8 @@
 Build Notes
 
+## 16/07/2026
+- Created storage module. This was quite straightforward, although to be transparent I have not tested it yet. I do still need to create the link between Container Apps and the File Share. I will do that, and the testing, in the next session. Sources: 1 - [Microsoft.Storage storageAccounts](https://learn.microsoft.com/en-us/azure/templates/microsoft.storage/storageaccounts?pivots=deployment-language-bicep) 2 - [Microsoft.Storage storageAccounts/fileServices](https://learn.microsoft.com/en-us/azure/templates/microsoft.storage/storageaccounts/fileservices?pivots=deployment-language-bicep) 3 - [Microsoft.Storage storageAccounts/fileServices/shares](https://learn.microsoft.com/en-us/azure/templates/microsoft.storage/storageaccounts/fileservices/shares?pivots=deployment-language-bicep)
+
 ## 15/07/2026
 - Uploaded the application code to repo
 - Uploaded application image to Azure Container Registry using `docker tag` and `docker push` commands
