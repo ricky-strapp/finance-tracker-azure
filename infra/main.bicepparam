@@ -62,19 +62,35 @@ param requiredManagedEnvironments = [
   }
 ]
 
+param storageName = 'fintrackstorage01'
+param storageRG = 'rg-fintrack-personal-${location}'
+param fileShareName = 'fintrack-db-share'
+param managedEnvironmentReqStorage = 'me-fintrack-personal-${location}'
+
 param requiredAppServices = [
   {
     appServiceName: 'as-fintrack-personal-${location}'
     rgName: 'rg-fintrack-personal-${location}'
     managedEnvironmentName: 'me-fintrack-personal-${location}'
+    volumes: [
+      {
+        name: 'fintrack-db-volume'
+        storageName: 'fintrack-db-mount'
+        storageType: 'AzureFile'
+      }
+    ]
+    volumeMounts: [
+      {
+        volumeName: 'fintrack-db-volume'
+        mountPath: '/app/database'
+      }
+    ]
   }
   {
     appServiceName: 'as-fintrack-demo-${location}'
     rgName: 'rg-fintrack-demo-${location}'
     managedEnvironmentName: 'me-fintrack-demo-${location}'
+    volumes: []
+    volumeMounts: []
   }
 ]
-
-param storageName = 'fintrackstorage01'
-param storageRG = 'rg-fintrack-personal-${location}'
-param fileShareName = 'fintrack-db-share'
