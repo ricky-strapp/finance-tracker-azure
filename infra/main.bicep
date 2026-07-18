@@ -11,6 +11,7 @@ param requiredAppServices array
 param storageName string
 param storageRG string
 param fileShareName string
+param managedEnvironmentReqStorage string
 
 module resourceGroups './modules/resourceGroups.bicep' = [for item in rgDetails: {
   name:'${item.rgName}-deployment'
@@ -98,6 +99,17 @@ module identity './modules/identity.bicep' = {
   ]
 }
 
+module storageAccount './modules/storage.bicep' = {
+  name: '${storageName}-deployment'
+  scope: resourceGroup(storageRG)
+  params:{
+    storageName: storageName
+    location: location
+    fileShareName: fileShareName
+    managedEnvironmentReqStorage: managedEnvironmentReqStorage
+  }
+}
+
 module containerApps './modules/containerApp.bicep' = [for item in requiredAppServices: {
   name: '${item.appServiceName}-deployment'
   scope: resourceGroup(item.rgName)
@@ -108,18 +120,11 @@ module containerApps './modules/containerApp.bicep' = [for item in requiredAppSe
     identityID: identity.outputs.identityId
     containerRegistryName: '${containerRegistryName}.azurecr.io'
     containerImage: '${containerRegistryName}.azurecr.io/fintrack:v1'
+    volumes: item.volumes
+    volumeMounts: item.volumeMounts 
   }
   dependsOn: [
     managedEnvironments
+    storageAccount
   ]
 }]
-
-module storageAccount './modules/storage.bicep' = {
-  name: '${storageName}-deployment'
-  scope: resourceGroup(storageRG)
-  params:{
-    storageName: storageName
-    location: location
-    fileShareName: fileShareName
-  }
-}
