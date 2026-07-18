@@ -6,6 +6,8 @@ param managedEnvironmentId string
 param identityID string
 param containerRegistryName string
 param containerImage string
+param volumes array
+param volumeMounts array
 
 
 resource containerApp 'Microsoft.App/containerApps@2026-01-01' = {
@@ -41,13 +43,13 @@ resource containerApp 'Microsoft.App/containerApps@2026-01-01' = {
             cpu: any('0.25')
             memory: '0.5Gi'
           }
-          volumeMounts: []
+          volumeMounts: volumeMounts
         }
       ]
       scale: {
         maxReplicas: 10
       }
-      volumes: []
+      volumes: volumes
     }
   }
 }
