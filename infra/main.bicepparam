@@ -55,17 +55,16 @@ param requiredManagedEnvironments = [
   {
     managedEnvironmentName: 'me-fintrack-personal-${location}'
     rgName: 'rg-fintrack-personal-${location}'
+    volumeMount: true
+    storageName: 'fintrackstorage01'
+    fileShareName: 'fintrack-db-share'
   }
   {
     managedEnvironmentName: 'me-fintrack-demo-${location}'
     rgName: 'rg-fintrack-demo-${location}'
+    volumeMount: false
   }
 ]
-
-param storageName = 'fintrackstorage01'
-param storageRG = 'rg-fintrack-personal-${location}'
-param fileShareName = 'fintrack-db-share'
-param managedEnvironmentReqStorage = 'me-fintrack-personal-${location}'
 
 param requiredAppServices = [
   {
