@@ -8,10 +8,6 @@ param containerRegistryRG string
 param requiredLogAnalyticsWorkspaces array
 param requiredManagedEnvironments array
 param requiredAppServices array
-param storageName string
-param storageRG string
-param fileShareName string
-param managedEnvironmentReqStorage string
 
 module resourceGroups './modules/resourceGroups.bicep' = [for item in rgDetails: {
   name:'${item.rgName}-deployment'
@@ -99,16 +95,19 @@ module identity './modules/identity.bicep' = {
   ]
 }
 
-module storageAccount './modules/storage.bicep' = {
-  name: '${storageName}-deployment'
-  scope: resourceGroup(storageRG)
+module storageAccount './modules/storage.bicep' = [for item in requiredManagedEnvironments: if(item.volumeMount == true) {
+  name: '${item.storageName}-deployment'
+  scope: resourceGroup(item.rgName)
   params:{
-    storageName: storageName
+    storageName: item.storageName
     location: location
-    fileShareName: fileShareName
-    managedEnvironmentReqStorage: managedEnvironmentReqStorage
+    fileShareName: item.fileShareName
+    existingManagedEnvironmentName: item.managedEnvironmentName
   }
-}
+  dependsOn: [
+    managedEnvironments
+  ]
+}]
 
 module containerApps './modules/containerApp.bicep' = [for item in requiredAppServices: {
   name: '${item.appServiceName}-deployment'
@@ -125,6 +124,5 @@ module containerApps './modules/containerApp.bicep' = [for item in requiredAppSe
   }
   dependsOn: [
     managedEnvironments
-    storageAccount
   ]
 }]
