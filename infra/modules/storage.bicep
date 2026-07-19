@@ -3,7 +3,7 @@ targetScope = 'resourceGroup'
 param location string
 param storageName string
 param fileShareName string
-param managedEnvironmentReqStorage string
+param existingManagedEnvironmentName string
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2026-04-01' = {
   name: storageName
@@ -25,7 +25,7 @@ resource fileShare 'Microsoft.Storage/storageAccounts/fileServices/shares@2026-0
 }
 
 resource existingManagedEnvironment 'Microsoft.App/managedEnvironments@2025-07-01' existing = {
-  name: managedEnvironmentReqStorage
+ name: existingManagedEnvironmentName
 }
 
 resource containerAppStorage 'Microsoft.App/managedEnvironments/storages@2026-01-01' = {
