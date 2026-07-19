@@ -1,5 +1,8 @@
 Build Notes
 
+## 19/07/2026
+- Got rid of the `managedEnvironmentReqStorage` parameter. I decided that it would be best to put a flag in the managedEnvironment paramaters and have the storage module loop over that, checking against the flag to see if it should run or not. The only issue was again knowing what syntax to use, because i needed to loop and have a decision point inside the loop, which I haven't done up until now in this project so I had research that. Sources: 1 - [Iterative loops in Bicep](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/loops)
+
 ## 18/07/2026
 - Linked up the storage creation to the managed environment. The syntax was unclear to me for the accountKey property, it was right at the bottom of Source 1, but it took a while to work that out. 
 - I had to change the containerApps module to add the storage details. This was interesting because I initially set it up passing the individual parameters through to the module, however I eventually realised that this was not going to work because the same value would get passed through for each of the two environments in the loop (the demo and personal) when only one needs a storage mount at all. I toyed with a few ideas, including passing a blank string through, but my research showed that would likely cause failures. Eventually I came to the conclusion that if I build those arrays in the parameters file itself, then either the values, or blank arrays, which would avoid the blank string issue. This took some time to sort out, so again I have not tested this element yet.
