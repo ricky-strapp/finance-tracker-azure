@@ -1,5 +1,12 @@
 Build Notes
 
+## 21/07/2026
+- Ran a what-if depolyment from the last few days updates; it reported no issues. The actual deployment failed though due to race conditions where the storage wasn't ready in time for the container app to use. I added in a dependency in the containerApps module for the storage module to finish which solved that.
+- I ran into some issues at this point relating to my apps usage of SQLite over Azure Files. I knew from the beginning was potentially going to cause issues. There was a noticeable change in behaviour between the demo copy (local db file)and the personal copy (db file now mounted in file share). The demo version was fine, but the personal copy was immediately failing with a database locked error.
+- Because this error was moreso related to my app than the Azure side of things, I decided to consult with Gemini for any potential solutions. It recommended some minor changes to how the connection strings were handled. After I made the code changes to the app, I rebuilt the docker image and pushed it to the container registry.
+- Those changes seem to have resolved the issue and the personal app loaded up ok.
+- I then added some entries into the app (new accounts, transfers etc) and tested to see if the app would retain the data after both revision restarts and also from a scale from zero; both of which were successful.
+
 ## 19/07/2026
 - Got rid of the `managedEnvironmentReqStorage` parameter. I decided that it would be best to put a flag in the managedEnvironment paramaters and have the storage module loop over that, checking against the flag to see if it should run or not. The only issue was again knowing what syntax to use, because i needed to loop and have a decision point inside the loop, which I haven't done up until now in this project so I had research that. Sources: 1 - [Iterative loops in Bicep](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/loops)
 
