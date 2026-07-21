@@ -124,5 +124,6 @@ module containerApps './modules/containerApp.bicep' = [for item in requiredAppSe
   }
   dependsOn: [
     managedEnvironments
+    storageAccount
   ]
 }]
