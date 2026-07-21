@@ -7,16 +7,19 @@ from flask import Flask, g, request, jsonify, render_template
 app = Flask(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# 1. Raw file system path (used for os.path operations and getmtime)
 DB_PATH = os.path.join(BASE_DIR, "database", "finance_tracker.db")
 
+# 2. SQLite URI connection string (bypasses SMB locks on Azure Files)
+DB_URI = f"file:{DB_PATH}?nolock=1"
 
 def get_db():
-    if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
+    if 'db' not in g:
+        # Pass uri=True so SQLite parses ?nolock=1
+        g.db = sqlite3.connect(DB_URI, uri=True, timeout=30.0)
         g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA foreign_keys = ON")
     return g.db
-
 
 @app.teardown_appcontext
 def close_db(error):
@@ -155,7 +158,7 @@ LATEST_VERSION = max(MIGRATIONS)
 
 
 def run_migrations():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_URI, uri=True, timeout=30.0)
     cursor = conn.cursor()
 
     # Create the version-tracking table if this is a brand-new database
@@ -700,7 +703,7 @@ def health_check():
     Returns {"status": "ok"} or {"status": "error", "detail": "..."}.
     """
     try:
-        conn = sqlite3.connect(DB_PATH, timeout=3)
+        conn = sqlite3.connect(DB_URI, uri=True, timeout=30.0)
         conn.execute("BEGIN")
         conn.execute("CREATE TABLE IF NOT EXISTS _health_check (id INTEGER PRIMARY KEY)")
         conn.execute("INSERT INTO _health_check (id) VALUES (1)")
