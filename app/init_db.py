@@ -1,14 +1,18 @@
 import sqlite3
 import os
 
-# Build a path to the database file relative to this script's location.
-# This means it works regardless of where you run it from.
+# Build path relative to script location
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# 1. Raw file path string (for OS functions & print statements)
 DB_PATH = os.path.join(BASE_DIR, "database", "finance_tracker.db")
+
+# 2. Connection URI (for SQLite over SMB)
+DB_URI = f"file:{DB_PATH}?nolock=1"
 
 def get_connection():
     """Create and return a database connection with foreign keys enabled."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_URI, uri=True, timeout=30.0)
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
