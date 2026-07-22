@@ -8,6 +8,9 @@ param containerRegistryRG string
 param requiredLogAnalyticsWorkspaces array
 param requiredManagedEnvironments array
 param requiredAppServices array
+param vaultName string
+param vaultRG string
+param policyName string
 
 module resourceGroups './modules/resourceGroups.bicep' = [for item in rgDetails: {
   name:'${item.rgName}-deployment'
@@ -127,3 +130,13 @@ module containerApps './modules/containerApp.bicep' = [for item in requiredAppSe
     storageAccount
   ]
 }]
+
+module recoveryVault './modules/recoveryVault.bicep' = {
+  name: '${vaultName}-deployment'
+  scope: resourceGroup(vaultRG)
+  params: {
+    resourceName: vaultName
+    location: location
+    policyName: policyName
+  }
+}
