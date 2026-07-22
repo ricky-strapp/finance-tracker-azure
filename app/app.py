@@ -19,6 +19,7 @@ def get_db():
         # Pass uri=True so SQLite parses ?nolock=1
         g.db = sqlite3.connect(DB_URI, uri=True, timeout=30.0)
         g.db.row_factory = sqlite3.Row
+        g.db.execute("PRAGMA foreign_keys = ON;")
     return g.db
 
 @app.teardown_appcontext
