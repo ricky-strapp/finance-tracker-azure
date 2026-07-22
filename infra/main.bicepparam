@@ -93,3 +93,7 @@ param requiredAppServices = [
     volumeMounts: []
   }
 ]
+
+param vaultName = 'rv-fintrack-personal-${location}'
+param vaultRG = 'rg-fintrack-personal-${location}'
+param policyName = 'rp-fintrack-personal-${location}'
