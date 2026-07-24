@@ -24,6 +24,10 @@ def get_db():
         g.db.execute("PRAGMA journal_mode = DELETE;")
     return g.db
 
+with app.app_context():
+    import init_db
+    init_db.init_db()  # This calls your init script safely using your app context
+
 @app.teardown_appcontext
 def close_db(error):
     db = g.pop("db", None)
