@@ -12,4 +12,4 @@ RUN mkdir -p database
 
 EXPOSE 5000
 
-CMD ["sh", "-c", "python init_db.py && gunicorn --bind 0.0.0.0:5000 app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
