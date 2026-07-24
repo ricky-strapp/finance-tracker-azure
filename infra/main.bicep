@@ -11,6 +11,8 @@ param requiredAppServices array
 param vaultName string
 param vaultRG string
 param policyName string
+param keyName string
+param keyRG string
 
 module resourceGroups './modules/resourceGroups.bicep' = [for item in rgDetails: {
   name:'${item.rgName}-deployment'
@@ -121,7 +123,7 @@ module containerApps './modules/containerApp.bicep' = [for item in requiredAppSe
     managedEnvironmentId: '/subscriptions/${subscription().subscriptionId}/resourceGroups/${item.rgName}/providers/Microsoft.App/managedEnvironments/${item.managedEnvironmentName}'
     identityID: identity.outputs.identityId
     containerRegistryName: '${containerRegistryName}.azurecr.io'
-    containerImage: '${containerRegistryName}.azurecr.io/fintrack:v1'
+    containerImage: '${containerRegistryName}.azurecr.io/finance-tracker:latest'
     volumes: item.volumes
     volumeMounts: item.volumeMounts 
   }
@@ -140,3 +142,14 @@ module recoveryVault './modules/recoveryVault.bicep' = {
     policyName: policyName
   }
 }
+
+module keyVault './modules/keyVault.bicep' = {
+  name: '${keyName}-deployment'
+  scope: resourceGroup(keyRG)
+  params: {
+    resourceName: keyName
+    location: location
+    principalId: identity.outputs.principalId
+  }
+}
+
