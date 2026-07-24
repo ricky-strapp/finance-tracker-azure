@@ -1,5 +1,14 @@
 Build Notes
 
+## 24/07/2026
+- Today I worked on the security of the personal side of the app, so first I created the keyVault module. This was relatively straightforward. Sources: 1 - [Microsoft.KeyVault vaults](https://learn.microsoft.com/en-us/azure/templates/microsoft.keyvault/vaults?pivots=deployment-language-bicep) 2 - [Quickstart: Create an Azure key vault and a secret using Bicep](https://learn.microsoft.com/en-us/azure/key-vault/secrets/quick-create-bicep?tabs=CLI)
+- Updated the container image reference in the main Bicep file (I had fallen behind on keeping it current).
+- I used the portal to set up Microsoft sign in for the app. I added a new client secret and set up the app to restrict access to only me.
+- Around this point, while tidying up, I tried to delete the initially generated secret, but accidentally deleted my user-assigned managed identity in the process.
+- When I tried to open my app, it would not start up, and the app was stuck in the 'Activating' status.
+- I again made a couple of tweaks to the app code itself, as I thought it was another locking issue. I pushed a few new revisions, but things started to get stuck. It was at this point that I had to just zoom out. I decided that I would first run my bicep again, so that I got back to a known base state. Thankfully, after I ran the bicep again, things quickly freed up and my app started working again
+- Today was highly frustrating, but reminded me of a core principle that I knew anyway, which is to be more careful when deleting things. Ultimately though I have ended the day with both sides of the app functional, and the half which will contain my personal data, now secured properly, so it was a success.
+
 ## 22/07/2026
 - Added back in a line on the app code around foreign keys, this got omitted yesterday, but it needed to go back in.
 - Created a recoveryVault module, including a backup policy. This was relatively straightforward, as I am getting more used to the bicep now. I left the parameters for the vault as singular strings because, similar to the container registry, there is only ever going to be one created in this project. I would have made them an object and looped through them, if there was any chance of needing more created, but on this project that is not needed. Sources: 1 - [Microsoft.RecoveryServices vaults 2026-05-01](https://learn.microsoft.com/en-us/azure/templates/microsoft.recoveryservices/2026-05-01/vaults?pivots=deployment-language-bicep) 2 - [Quickstart: Create a Recovery Services vault by using Bicep](https://learn.microsoft.com/en-us/azure/site-recovery/quickstart-create-vault-bicep?tabs=CLI) 3 - [Microsoft.RecoveryServices vaults/backupPolicies](https://learn.microsoft.com/en-us/azure/templates/microsoft.recoveryservices/vaults/backuppolicies?pivots=deployment-language-bicep)
