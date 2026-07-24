@@ -97,3 +97,6 @@ param requiredAppServices = [
 param vaultName = 'rv-fintrack-personal-${location}'
 param vaultRG = 'rg-fintrack-personal-${location}'
 param policyName = 'rp-fintrack-personal-${location}'
+
+param keyName = 'kv-fintrack-personal'
+param keyRG = 'rg-fintrack-personal-${location}'
