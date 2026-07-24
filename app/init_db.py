@@ -12,6 +12,9 @@ DB_URI = f"file:{DB_PATH}?nolock=1"
 
 def get_connection():
     """Create and return a database connection with foreign keys enabled."""
+    # Ensure the parent directory (database/) exists before trying to open the file
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    
     conn = sqlite3.connect(DB_URI, uri=True, timeout=30.0)
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
