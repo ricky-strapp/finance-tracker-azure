@@ -100,3 +100,10 @@ param policyName = 'rp-fintrack-personal-${location}'
 
 param keyName = 'kv-fintrack-personal'
 param keyRG = 'rg-fintrack-personal-${location}'
+
+param alertsRG = 'rg-fintrack-personal-${location}'
+param actionGroupName = 'fintrackAG'
+param alertEmail = ''
+param metricAlertName = 'alert-fintrack-restarts'
+param groupShortName = 'fintrackAG'
+
