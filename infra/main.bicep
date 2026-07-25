@@ -1,6 +1,7 @@
 targetScope = 'subscription'
 
 param location string
+param baseTime string = utcNow('u')
 param rgDetails array
 param requiredVnets array
 param containerRegistryName string
@@ -13,6 +14,11 @@ param vaultRG string
 param policyName string
 param keyName string
 param keyRG string
+param actionGroupName string
+param alertEmail string
+param metricAlertName string
+param groupShortName string
+param alertsRG string
 
 module resourceGroups './modules/resourceGroups.bicep' = [for item in rgDetails: {
   name:'${item.rgName}-deployment'
@@ -114,7 +120,7 @@ module storageAccount './modules/storage.bicep' = [for item in requiredManagedEn
   ]
 }]
 
-module containerApps './modules/containerApp.bicep' = [for item in requiredAppServices: {
+module containerApp './modules/containerApp.bicep' = [for item in requiredAppServices: {
   name: '${item.appServiceName}-deployment'
   scope: resourceGroup(item.rgName)
   params: {
@@ -153,3 +159,58 @@ module keyVault './modules/keyVault.bicep' = {
   }
 }
 
+resource personalAppRG 'Microsoft.Resources/resourceGroups@2021-04-01' existing = {
+  name: 'rg-fintrack-personal-${location}'
+}
+
+resource personalApp 'Microsoft.App/containerApps@2024-03-01' existing = {
+  name: 'as-fintrack-personal-${location}'
+  scope: personalAppRG
+}
+
+module alerts 'modules/alerts.bicep' = {
+  name: 'fintrack-alerts-deployment'
+  scope: resourceGroup(alertsRG)
+  params: {
+    location: location
+    alertEmail: alertEmail
+    actionGroupName: actionGroupName
+    metricAlertName: metricAlertName
+    groupShortName: groupShortName
+    containerAppsResourceId: personalApp.id
+  }
+}
+
+var budgetStartDate = '${substring(baseTime, 0, 8)}01'
+var budgetEndDate = dateTimeAdd(baseTime, 'P2Y')
+
+resource monthlyBudget 'Microsoft.Consumption/budgets@2023-11-01' = {
+  name: 'fintrack-monthly-budget'
+  properties: {
+    timePeriod: {
+      startDate: budgetStartDate
+      endDate: budgetEndDate
+    }
+    timeGrain: 'Monthly'
+    amount: 20
+    category: 'Cost'
+    notifications: {
+      NotificationForExceededBudget1: {
+        enabled: true
+        operator: 'GreaterThan'
+        threshold: 80
+        contactEmails: [
+          ''
+        ]
+      }
+      NotificationForExceededBudget2: {
+        enabled: true
+        operator: 'GreaterThan'
+        threshold: 100
+        contactEmails: [
+          ''
+        ]
+      }
+    }
+  }
+}
