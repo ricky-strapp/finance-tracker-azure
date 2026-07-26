@@ -103,7 +103,7 @@ param keyRG = 'rg-fintrack-personal-${location}'
 
 param alertsRG = 'rg-fintrack-personal-${location}'
 param actionGroupName = 'fintrackAG'
-param alertEmail = ''
+param alertEmail = 'placeholder@example.com'
 param metricAlertName = 'alert-fintrack-restarts'
 param groupShortName = 'fintrackAG'
 
