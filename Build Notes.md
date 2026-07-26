@@ -1,5 +1,9 @@
 Build Notes
 
+## 26/07/2026
+- Updated the parameter for alert email to a placeholder email address and used that for the monthly budget notifications as well. Removed location from alerts module action group resource and changed to global instead.
+- Deployed alerts module and budget addition successfully.
+
 ## 25/07/2026
 - Added alerts module. This actually turned out to be considerably harder than I initially expected. I had trouble getting to grips with bicep syntax again, in two very specific parts.
 - The first troublesome area was around obtaining the ID of the container app for the personal side of the project. As the containerApps module, is actually a loop of module calls this is what made it challenging. My first attempt to just output the variables in the same fashion as some of the other modules, and to then use a filter function against the name to obtain the right row in the array, failed. I then did some research, and changed it to output all rows an an object instead, then filter against that; this also failed. Ultimately, I ended up using a couple of existing resource calls, firstly for the personal resource group, then for container apps in that resource group (because I ran into a scope issue trying to do just the container app query singularly). There may be a better way to do this, but I have not had enough exposure to bicep to know what it is just yet.
