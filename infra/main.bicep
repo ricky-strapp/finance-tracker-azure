@@ -172,7 +172,6 @@ module alerts 'modules/alerts.bicep' = {
   name: 'fintrack-alerts-deployment'
   scope: resourceGroup(alertsRG)
   params: {
-    location: location
     alertEmail: alertEmail
     actionGroupName: actionGroupName
     metricAlertName: metricAlertName
@@ -200,7 +199,7 @@ resource monthlyBudget 'Microsoft.Consumption/budgets@2023-11-01' = {
         operator: 'GreaterThan'
         threshold: 80
         contactEmails: [
-          ''
+          alertEmail
         ]
       }
       NotificationForExceededBudget2: {
@@ -208,7 +207,7 @@ resource monthlyBudget 'Microsoft.Consumption/budgets@2023-11-01' = {
         operator: 'GreaterThan'
         threshold: 100
         contactEmails: [
-          ''
+          alertEmail
         ]
       }
     }
