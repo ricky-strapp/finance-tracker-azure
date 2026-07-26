@@ -1,6 +1,5 @@
 targetScope = 'resourceGroup'
 
-param location string 
 param actionGroupName string
 param alertEmail string
 param metricAlertName string
@@ -9,7 +8,7 @@ param containerAppsResourceId string
 
 resource actionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = {
   name: actionGroupName
-  location: location
+  location: 'global'
   properties: {
     emailReceivers: [
       {
@@ -23,7 +22,7 @@ resource actionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = {
   }
 }
 
-resource metricAlert 'Microsoft.Insights/metricAlerts@2026-01-01' = {
+resource metricAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
   name: metricAlertName
   location: 'global'
   properties: {
