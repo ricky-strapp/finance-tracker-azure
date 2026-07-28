@@ -27,7 +27,7 @@ jobs:
 
       - name: Build and push Docker image
         run: |
-          docker build -t fintrackcontainerregistry01.azurecr.io/finance-tracker:${{ github.sha }} .
+          docker build -t fintrackcontainerregistry01.azurecr.io/finance-tracker:${{ github.sha }} ./app
           docker push fintrackcontainerregistry01.azurecr.io/finance-tracker:${{ github.sha }}
 
       - name: Update Personal Container App
