@@ -213,3 +213,36 @@ resource monthlyBudget 'Microsoft.Consumption/budgets@2023-11-01' = {
     }
   }
 }
+
+module githubActions 'modules/githubActions.bicep' = {
+  name: 'github-actions-deployment'
+  scope: resourceGroup(containerRegistryRG)
+  params: { 
+    location: location
+    containerRegistryName: containerRegistryName
+    githubIdentityName: 'gh-fintrack-identity'
+    federatedIdentityCredentialName: 'ghfed-fintrack-identity'
+  }
+  dependsOn: [
+    containerApp
+    containerRegistry
+  ]
+}
+
+module personalcontainerAppRoleAssignment 'modules/containerAppRoleAssignment.bicep' = {
+  name: 'personal-app-role-assignment'
+  scope: resourceGroup('rg-fintrack-personal-${location}')
+  params: {
+    githubIdentityId: githubActions.outputs.githubIdentityPrincipalId
+    appName: 'as-fintrack-personal-ukwest'
+  }
+}
+
+module democontainerAppRoleAssignment 'modules/containerAppRoleAssignment.bicep' = {
+  name: 'demo-app-role-assignment'
+  scope: resourceGroup('rg-fintrack-demo-${location}')
+  params: {
+    githubIdentityId: githubActions.outputs.githubIdentityPrincipalId
+    appName: 'as-fintrack-demo-ukwest'
+  }
+}
