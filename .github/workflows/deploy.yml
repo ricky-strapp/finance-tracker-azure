@@ -1,0 +1,45 @@
+name: Build and Deploy to Container Apps
+
+on:
+  push:
+    branches: ["main"]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        run: az acr login --name fintrackcontainerregistry01
+
+      - name: Build and push Docker image
+        run: |
+          docker build -t fintrackcontainerregistry01.azurecr.io/finance-tracker:${{ github.sha }} .
+          docker push fintrackcontainerregistry01.azurecr.io/finance-tracker:${{ github.sha }}
+
+      - name: Update Personal Container App
+        run: |
+          az containerapp update \
+            --name as-fintrack-personal-ukwest \
+            --resource-group rg-fintrack-personal-ukwest \
+            --image fintrackcontainerregistry01.azurecr.io/finance-tracker:${{ github.sha }}
+
+      - name: Update Demo Container App
+        run: |
+          az containerapp update \
+            --name as-fintrack-demo-ukwest \
+            --resource-group rg-fintrack-demo-ukwest \
+            --image fintrackcontainerregistry01.azurecr.io/finance-tracker:${{ github.sha }}
