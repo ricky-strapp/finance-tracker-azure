@@ -3,6 +3,7 @@ name: Build and Deploy to Container Apps
 on:
   push:
     branches: ["main"]
+  workflow_dispatch:
 
 permissions:
   id-token: write
