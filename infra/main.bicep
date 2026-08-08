@@ -88,6 +88,7 @@ module managedEnvironments './modules/managedEnvironments.bicep' = [for item in 
     subnetResourceId: networking[indexOf(networkRGNames, item.rgName)].outputs.subnet1ResourceId
   }
   dependsOn: [
+    resourceGroups
     logAnalytics
     networking
   ]
@@ -102,6 +103,7 @@ module identity './modules/identity.bicep' = {
     identityName: 'fintrack-identity'
   }
   dependsOn: [
+    resourceGroups
     containerRegistry
   ]
 }
@@ -129,13 +131,15 @@ module containerApp './modules/containerApp.bicep' = [for item in requiredAppSer
     managedEnvironmentId: '/subscriptions/${subscription().subscriptionId}/resourceGroups/${item.rgName}/providers/Microsoft.App/managedEnvironments/${item.managedEnvironmentName}'
     identityID: identity.outputs.identityId
     containerRegistryName: '${containerRegistryName}.azurecr.io'
-    containerImage: '${containerRegistryName}.azurecr.io/finance-tracker:latest'
+    containerImage: 'mcr.microsoft.com/azuredocs/aci-helloworld:latest'
     volumes: item.volumes
     volumeMounts: item.volumeMounts 
   }
   dependsOn: [
+    resourceGroups
     managedEnvironments
     storageAccount
+    containerRegistry
   ]
 }]
 
@@ -147,6 +151,9 @@ module recoveryVault './modules/recoveryVault.bicep' = {
     location: location
     policyName: policyName
   }
+  dependsOn: [
+    resourceGroups
+  ]
 }
 
 module keyVault './modules/keyVault.bicep' = {
@@ -157,6 +164,9 @@ module keyVault './modules/keyVault.bicep' = {
     location: location
     principalId: identity.outputs.principalId
   }
+  dependsOn: [
+    resourceGroups
+  ]
 }
 
 resource personalAppRG 'Microsoft.Resources/resourceGroups@2021-04-01' existing = {
@@ -178,6 +188,10 @@ module alerts 'modules/alerts.bicep' = {
     groupShortName: groupShortName
     containerAppsResourceId: personalApp.id
   }
+  dependsOn: [
+    resourceGroups
+    containerApp
+  ]
 }
 
 var budgetStartDate = '${substring(baseTime, 0, 8)}01'
@@ -224,6 +238,8 @@ module githubActions 'modules/githubActions.bicep' = {
     federatedIdentityCredentialName: 'ghfed-fintrack-identity'
   }
   dependsOn: [
+    resourceGroups
+    identity
     containerApp
     containerRegistry
   ]
@@ -236,6 +252,10 @@ module personalcontainerAppRoleAssignment 'modules/containerAppRoleAssignment.bi
     githubIdentityId: githubActions.outputs.githubIdentityPrincipalId
     appName: 'as-fintrack-personal-ukwest'
   }
+  dependsOn: [
+    resourceGroups
+    identity
+  ]
 }
 
 module democontainerAppRoleAssignment 'modules/containerAppRoleAssignment.bicep' = {
@@ -245,4 +265,8 @@ module democontainerAppRoleAssignment 'modules/containerAppRoleAssignment.bicep'
     githubIdentityId: githubActions.outputs.githubIdentityPrincipalId
     appName: 'as-fintrack-demo-ukwest'
   }
+  dependsOn: [
+    resourceGroups
+    identity
+  ]
 }
