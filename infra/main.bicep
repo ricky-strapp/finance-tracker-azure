@@ -250,7 +250,7 @@ module personalcontainerAppRoleAssignment 'modules/containerAppRoleAssignment.bi
   scope: resourceGroup('rg-fintrack-personal-${location}')
   params: {
     githubIdentityId: githubActions.outputs.githubIdentityPrincipalId
-    appName: 'as-fintrack-personal-ukwest'
+    appName: 'as-fintrack-personal-${location}'
   }
   dependsOn: [
     resourceGroups
@@ -263,7 +263,7 @@ module democontainerAppRoleAssignment 'modules/containerAppRoleAssignment.bicep'
   scope: resourceGroup('rg-fintrack-demo-${location}')
   params: {
     githubIdentityId: githubActions.outputs.githubIdentityPrincipalId
-    appName: 'as-fintrack-demo-ukwest'
+    appName: 'as-fintrack-demo-${location}'
   }
   dependsOn: [
     resourceGroups
