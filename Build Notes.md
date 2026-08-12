@@ -1,5 +1,10 @@
 Build Notes
 
+## 12/08/2026
+- Removed two hardcoded app names
+- Uploaded teardown script
+- Updated README with post build updates and lessons learned.
+
 ## 08/08/2026
 - My goal has been to do a full teardown of everything, then re-run the code to check and see if everything is working correctly when starting with nothing. This has been pretty challenging and has taken a lot of attempts.
 - The first issue I found was that when the bicep was running, the container registry was empty, and because the image is now coming in via github actions, it was failing as it was not available yet. To fix this I reverted back to having the hello world app image hardcoded into the bicep file. The apps don't work initially due to port issues, but when github actions runs, they then work afterwards.
