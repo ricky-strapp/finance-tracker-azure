@@ -119,7 +119,8 @@ Note: The first deployment uses the Microsoft Hello World image because the Cont
 - This powershell script will cleanly stop any Backup protection, delete the subscription level budget, deletes all applicable resource groups and purges any soft-deleted key vaults.
 
 **Build notes**
-Click **[here](Build Notes.md)**
+
+[Click here](Build%20Notes.md)
 
 **Lessons learned**
 
